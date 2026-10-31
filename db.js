@@ -1,0 +1,62 @@
+const { Pool } = require('pg');
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is missing. Copy .env.example to .env and add your PostgreSQL connection URL.');
+}
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.PGSSLMODE === 'disable'
+    ? false
+    : process.env.NODE_ENV === 'production' || process.env.PGSSLMODE === 'require'
+      ? { rejectUnauthorized: false }
+      : false,
+  max: Number(process.env.PGPOOL_MAX || 10),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
+
+async function initializeDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS portal_users (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      student_id VARCHAR(40) NOT NULL UNIQUE,
+      email VARCHAR(254) NOT NULL UNIQUE,
+      phone VARCHAR(30) NOT NULL,
+      course VARCHAR(100) NOT NULL,
+      study_year VARCHAR(20) NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS item_reports (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES portal_users(id) ON DELETE CASCADE,
+      kind VARCHAR(5) NOT NULL CHECK (kind IN ('lost', 'found')),
+      title VARCHAR(120) NOT NULL,
+      category VARCHAR(40) NOT NULL,
+      description VARCHAR(1000) NOT NULL DEFAULT '',
+      location VARCHAR(120) NOT NULL,
+      item_date DATE NOT NULL,
+      status VARCHAR(10) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'returned')),
+      phone_public BOOLEAN NOT NULL DEFAULT FALSE,
+      photo_mime VARCHAR(30),
+      photo_data BYTEA,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK ((photo_data IS NULL AND photo_mime IS NULL) OR (photo_data IS NOT NULL AND photo_mime IN ('image/jpeg', 'image/png', 'image/webp')))
+    );
+
+    ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS photo_mime VARCHAR(30);
+    ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS photo_data BYTEA;
+
+    CREATE INDEX IF NOT EXISTS item_reports_created_idx ON item_reports(created_at DESC);
+    CREATE INDEX IF NOT EXISTS item_reports_user_idx ON item_reports(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS item_reports_kind_status_idx ON item_reports(kind, status);
+  `);
+}
+
+pool.on('error', error => console.error('Unexpected PostgreSQL pool error:', error.message));
+
+module.exports = { pool, initializeDatabase };

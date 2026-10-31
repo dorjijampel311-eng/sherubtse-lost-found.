@@ -1,0 +1,23 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const dbPath = require.resolve('../db');
+let recipients = [];
+require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: { pool: { query: async sql => { assert.match(sql, /notifications_enabled=TRUE/); return { rows: recipients }; } } } };
+const mailer = require('nodemailer');
+let sent = [], fail = false;
+mailer.createTransport = () => ({ sendMail: async message => { sent.push(message); if (fail) throw new Error('SMTP unavailable'); return { accepted: [message.to] }; }, close() {} });
+const { notifyLostItem } = require('../email');
+const item = { id: '1', title: 'Test item', category: 'Other', location: 'Campus', itemDate: '2026-10-31' };
+test('notification outcomes and recipient privacy', async () => {
+  for (const key of ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASSWORD','EMAIL_FROM','APP_BASE_URL']) delete process.env[key];
+  assert.equal((await notifyLostItem(item)).status, 'unconfigured');
+  Object.assign(process.env, { SMTP_HOST: 'smtp.example.test', SMTP_PORT: '587', SMTP_USER: 'test', SMTP_PASSWORD: 'test', EMAIL_FROM: 'sender@example.test', APP_BASE_URL: 'https://campus.example.test' });
+  assert.equal((await notifyLostItem(item)).status, 'empty');
+  recipients = [{ student_id: '07240068', email: '07240068.sherubtse@rub.edu.bt' }, { student_id: '07240069', email: '07240069.sherubtse@rub.edu.bt' }, { student_id: 'old', email: 'old@example.test' }];
+  assert.equal((await notifyLostItem(item)).status, 'accepted');
+  assert.equal(sent.length, 2); assert.equal(sent[0].to, recipients[0].email);
+  assert.match(sent[0].text, /https:\/\/campus.example.test\/browse.html\?id=1/);
+  assert.ok(!sent[0].text.includes(recipients[1].email));
+  fail = true;
+  assert.equal((await notifyLostItem(item)).status, 'failed');
+});
