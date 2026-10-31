@@ -1,0 +1,12 @@
+const router = require('express').Router();
+const controller = require('../controllers/authController');
+const { codeRequestLimit, codeAttemptLimit, emailRequestLimit, loginLimit, registerLimit } = require('../middleware/rateLimits');
+router.post('/register', registerLimit, controller.register);
+router.post('/login', loginLimit, controller.login);
+router.post('/resend-verification', codeRequestLimit, emailRequestLimit, controller.resendVerification);
+router.post('/verify-email', codeAttemptLimit, controller.verifyEmail);
+router.post('/forgot-password', codeRequestLimit, emailRequestLimit, controller.forgotPassword);
+router.post('/reset-password', codeAttemptLimit, controller.resetPassword);
+router.get('/me', controller.me);
+router.post('/logout', controller.logout);
+module.exports = router;

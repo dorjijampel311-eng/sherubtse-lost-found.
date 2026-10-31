@@ -1,0 +1,12 @@
+const router = require('express').Router();
+const controller = require('../controllers/itemController');
+const { requireUser } = require('../middleware/auth');
+const upload = require('../middleware/upload');
+const { createReportLimit } = require('../middleware/rateLimits');
+router.get('/items', controller.listItems);
+router.get('/items/:id/photo', controller.itemPhoto);
+router.post('/items', requireUser, createReportLimit, upload.single('photo'), controller.createItem);
+router.patch('/items/:id', requireUser, controller.markReturned);
+router.delete('/items/:id', requireUser, controller.deleteItem);
+router.get('/stats', controller.stats);
+module.exports = router;

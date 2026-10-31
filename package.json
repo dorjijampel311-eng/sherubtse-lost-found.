@@ -7,8 +7,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check db.js && node --check email.js && node --check validation.js && node --check public/js/app.js",
-    "test": "node test/run.js"
+    "check": "node scripts/check.js",
+    "test": "node test/run.js && node test/auth-codes.test.js",
+    "test:auth:db": "node test/auth-integration.js",
+    "test:integration": "node test/integration.js"
   },
   "engines": {
     "node": ">=20"
@@ -17,6 +19,7 @@
     "bcryptjs": "^2.4.3",
     "connect-pg-simple": "^10.0.0",
     "dotenv": "^16.4.7",
+    "ejs": "^7.0.2",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.1",
