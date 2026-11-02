@@ -3,3 +3,4 @@ require('./email.test');
 require('./admin-bootstrap.test');
 require('./environment.test');
 require('./apps-script.test');
+require('./listing-actions.test');

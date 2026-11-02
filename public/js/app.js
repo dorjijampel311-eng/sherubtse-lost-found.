@@ -40,7 +40,8 @@ function formattedDate(value) {
   return Number.isNaN(date.valueOf()) ? '' : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function card(item, manageable = false) {
+function card(item) {
+  const manageable = Boolean(state.user && item.ownerId != null && String(item.ownerId) === String(state.user.id));
   const kindLabel = item.kind === 'lost' ? 'Lost' : 'Found';
   const badge = item.status === 'returned' ? 'Returned' : kindLabel;
   const statusClass = item.status === 'returned' ? 'status-returned' : `status-${item.kind}`;
@@ -65,6 +66,7 @@ async function initBrowse() {
   const empty = document.querySelector('#items-empty');
   try { state.items = await fetchItems(); renderBrowse(); }
   catch (error) { label.textContent = error.message; }
+  bindListingActions(container, async () => { state.items = await fetchItems(); renderBrowse(); });
   document.querySelector('#item-search')?.addEventListener('input', renderBrowse);
   document.querySelector('#category-filter')?.addEventListener('change', renderBrowse);
   document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => {
@@ -160,20 +162,9 @@ async function initMyItems() {
   if (!state.user) { container.innerHTML = '<div class="empty-state">Please <a href="/login">log in</a> to see and manage your posts.</div>'; return; }
   try {
     const items = await fetchItems(true);
-    container.innerHTML = items.map(item => card(item, true)).join('');
+    container.innerHTML = items.map(item => card(item)).join('');
     empty.hidden = items.length !== 0;
-    container.onclick = async event => {
-      const remove = event.target.closest('[data-delete]');
-      const returned = event.target.closest('[data-return]');
-      if (!remove && !returned) return;
-      const id = (remove || returned).dataset[remove ? 'delete' : 'return'];
-      if (remove && !confirm('Delete this listing permanently?')) return;
-      try {
-        if (remove) await api(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        else await api(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'returned' }) });
-        await initMyItems();
-      } catch (error) { alert(error.message); }
-    };
+    bindListingActions(container, initMyItems);
   } catch (error) { container.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
 }
 
@@ -185,6 +176,7 @@ async function initHome() {
     document.querySelector('#stat-found').textContent = stats.found;
     document.querySelector('#stat-returned').textContent = stats.returned;
     const latest = items.slice(0, 3);
+    bindListingActions(document.querySelector('#recent-items'), initHome);
     document.querySelector('#recent-items').innerHTML = latest.length ? latest.map(item => card(item)).join('') : '<div class="empty-state">No reports have been posted yet. Be the first to <a href="/report-lost">report an item</a>.</div>';
   } catch { document.querySelector('#recent-items').innerHTML = '<div class="empty-state">Listings will appear here when the service is connected.</div>'; }
 }
@@ -333,4 +325,23 @@ async function initAdmin() {
     overview.textContent = ''; message.textContent = error.message;
     document.querySelectorAll('#admin-feedback, #admin-listings').forEach(target => { target.textContent = 'Unable to load. Refresh to try again.'; });
   }
+}
+
+function bindListingActions(container, refresh) {
+  container.onclick = async event => {
+    const remove = event.target.closest('[data-delete]');
+    const returned = event.target.closest('[data-return]');
+    const button = remove || returned;
+    if (!button || button.disabled) return;
+    const id = button.dataset[remove ? 'delete' : 'return'];
+    if (remove && !confirm('Delete this listing permanently?')) return;
+    const originalLabel = button.textContent;
+    button.disabled = true; button.textContent = remove ? 'Deleting...' : 'Updating...';
+    try {
+      if (remove) await api(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      else await api(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'returned' }) });
+      await refresh();
+    } catch (error) { alert(error.message); }
+    finally { button.disabled = false; button.textContent = originalLabel; }
+  };
 }
