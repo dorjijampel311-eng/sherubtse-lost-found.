@@ -3,7 +3,7 @@ const { currentUser } = require('../middleware/auth');
 const { clean, validDate, photoMatches } = require('../lib/helpers');
 const categories = new Set(['Electronics', 'ID cards & wallets', 'Bags', 'Books & notes', 'Keys', 'Clothing', 'Sports equipment', 'Other']);
 
-const { notifyLostItem, notifyFoundItem } = require('../email');
+const { notifyFoundItem } = require('../email');
 exports.listItems = async (req, res, next) => {
   try {
     const mine = req.query.mine === '1';
@@ -42,7 +42,7 @@ exports.createItem = async (req, res, next) => {
     const photoData = req.file?.buffer || null;
     const result = await itemModel.create([currentUser(req).id, kind, title, category, description, location, itemDate, phonePublic, photoMime, photoData]);
     const notificationItem = { id: result.rows[0].id, title, category, description, location, itemDate, photoData, photoMime, posterId: currentUser(req).id };
-    const notification = kind === 'found' ? await notifyFoundItem(notificationItem) : await notifyLostItem(notificationItem);
+    const notification = kind === 'found' ? await notifyFoundItem(notificationItem) : null;
     res.status(201).json({ id: result.rows[0].id, notification });
   } catch (error) { next(error); }
 };

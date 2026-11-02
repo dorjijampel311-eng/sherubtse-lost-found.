@@ -197,3 +197,7 @@ Each lost/found listing has a collapsible comment section. Verified students can
 Tapping a commenter name opens an accessible dialog with that account's current phone, programme and academic year. This contact endpoint requires a verified sign-in and checks that the student commented on the requested item. It returns no password hashes, student numbers, email or roles. The comment form explains this contact sharing before submission. Anonymous visitors can read names/comments and are prompted to sign in to view contact details or post.
 
 Startup adds the `item_comments` table and its item/thread index without modifying existing data. Deleting a listing removes its comments through a foreign-key cascade; deleting an account also removes its comments. Comment routes/controllers/models use the existing project structure and parameterized PostgreSQL queries.
+
+## Found-only item notifications
+
+Only creating a new FOUND listing triggers item email notifications. LOST posts, comments, returned-status changes and deletions do not trigger them. Found notifications say ?Someone has found an item?could it be yours?? and include the title, category, location, date found and item-view link, using the existing web-app sender. Existing recipient privacy rules remain: verified registered accounts with notifications enabled, excluding the poster. Failed delivery leaves the item saved and is not reported as successful.

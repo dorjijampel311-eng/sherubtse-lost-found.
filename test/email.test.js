@@ -83,8 +83,8 @@ test('found notification is separate from verification, escapes details, embeds 
   assert.deepEqual(sent.map(mail => mail.to), [recipients[1].email, recipients[2].email]);
   assert.match(queries[0].sql, /id<>\$1/); assert.deepEqual(queries[0].values, ['1']);
   for (const mail of sent) {
-    assert.ok(mail.html.includes('Someone has found this item. Does it belong to you?'));
-    assert.ok(mail.text.includes('Someone has found this item. Does it belong to you?'));
+    assert.ok(mail.html.includes('Someone has found an item—could it be yours?'));
+    assert.ok(mail.text.includes('Someone has found an item—could it be yours?'));
     for (const field of [found.title, found.category, found.description, found.location, found.itemDate]) assert.ok(mail.text.includes(field));
     assert.ok(mail.html.includes('&lt;script&gt;')); assert.ok(!mail.html.includes('<script>'));
     assert.ok(mail.html.includes('Bottle &lt;gold&gt;')); assert.ok(mail.html.includes('Library &lt;desk&gt;'));

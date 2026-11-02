@@ -8,7 +8,7 @@ const mailbox = [];
 const foundEvents = [];
 emailModule.emailConfigured = () => true;
 emailModule.sendAuthCode = async mail => { mailbox.push(mail); return { status: 'accepted' }; };
-emailModule.notifyLostItem = async () => ({ status: 'unconfigured', message: 'Mocked sender; no real mail.' });
+emailModule.notifyLostItem = async () => { assert.fail('Lost posts must not send notifications.'); };
 emailModule.notifyFoundItem = async item => { foundEvents.push(item); return { status: 'unconfigured', message: 'Mocked sender; no real mail.' }; };
 const { app } = require('../server');
 const crypto = require('node:crypto');
@@ -179,11 +179,10 @@ function itemForm(kind = 'found') {
     assert.equal((await request('/api/items?mine=1', { cookie: owner.cookie })).data.items.some(item => item.id === id), true);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: owner.cookie })).status, 204);
     assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM item_comments WHERE item_id=$1', [id])).rows[0].count, 0);
-    // Avoid sending any actual notifications from verification.
-    if (!process.env.MAIL_WEB_APP_URL) {
-      const lost = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: itemForm('lost') });
-      assert.equal(lost.status, 201); assert.equal(lost.data.notification.status, 'unconfigured');
-    }
+    const lost = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: itemForm('lost') });
+    assert.equal(lost.status, 201); assert.equal(lost.data.notification, null);
+    assert.equal(foundEvents.length, 1, 'Only the newly created found listing sends an email event; lost posts, comments, returns and deletes do not.');
+    console.log('PASS: only newly created FOUND posts trigger notification delivery.');
     console.log('PASS: PostgreSQL registration, hashed passwords, immutable identity, profile validation, sessions, listing/photo persistence, upload rejection, private contact details, ownership, returned/deleted posts, and unconfigured-email save path.');
   } finally {
     for (const user of users) {
