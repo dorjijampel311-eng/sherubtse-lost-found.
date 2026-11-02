@@ -193,6 +193,7 @@ function initMobileMenu() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initPasswordToggles();
   initMobileMenu();
   await loadAccount();
   bindAuthForms();
@@ -345,4 +346,34 @@ function bindListingActions(container, refresh) {
     } catch (error) { alert(error.message); }
     finally { button.disabled = false; button.textContent = originalLabel; }
   };
+}
+
+function initPasswordToggles() {
+  const eye = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOff = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 3 18 18M10.6 5.1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.1 3.8M6.2 6.2A22 22 0 0 0 2 12s3.5 7 10 7a11 11 0 0 0 5.1-1.3M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  let index = 0;
+  document.querySelectorAll('input[type="password"]').forEach(input => {
+    if (input.dataset.passwordToggle === 'true') return;
+    input.dataset.passwordToggle = 'true';
+    if (!input.id) {
+      do { index++; } while (document.getElementById(`password-field-${index}`));
+      input.id = `password-field-${index}`;
+    }
+    const wrapper = document.createElement('span'); wrapper.className = 'password-control';
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'password-toggle';
+    button.disabled = input.disabled;
+    button.setAttribute('aria-controls', input.id);
+    const field = input.name === 'confirmPassword' ? 'confirm password' : 'password';
+    const update = visible => {
+      input.type = visible ? 'text' : 'password';
+      button.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} ${field}`);
+      button.setAttribute('aria-pressed', String(visible));
+      button.title = `${visible ? 'Hide' : 'Show'} ${field}`;
+      button.innerHTML = visible ? eyeOff : eye;
+    };
+    update(false);
+    button.addEventListener('click', event => { event.preventDefault(); update(input.type === 'password'); });
+    input.form?.addEventListener('reset', () => update(false));
+    input.before(wrapper); wrapper.append(input, button);
+  });
 }
