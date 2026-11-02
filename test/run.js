@@ -5,3 +5,4 @@ require('./environment.test');
 require('./apps-script.test');
 require('./listing-actions.test');
 require('./password-toggle.test');
+require('./date-field.test');

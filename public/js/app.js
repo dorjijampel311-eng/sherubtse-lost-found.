@@ -194,6 +194,7 @@ function initMobileMenu() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   initPasswordToggles();
+  initDateFields();
   initMobileMenu();
   await loadAccount();
   bindAuthForms();
@@ -375,5 +376,37 @@ function initPasswordToggles() {
     button.addEventListener('click', event => { event.preventDefault(); update(input.type === 'password'); });
     input.form?.addEventListener('reset', () => update(false));
     input.before(wrapper); wrapper.append(input, button);
+  });
+}
+
+function dateInputISO(value) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!match || Number(match[3]) < 1) return '';
+  const iso = `${match[3]}-${match[2]}-${match[1]}`;
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === iso ? iso : '';
+}
+function dateInputDisplay(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+function initDateFields() {
+  document.querySelectorAll('[data-date-format="dmy"]').forEach(control => {
+    const display = control.querySelector('[data-date-display]');
+    const picker = control.querySelector('input[type="date"]');
+    const fromPicker = () => { display.value = dateInputDisplay(picker.value); display.setCustomValidity(''); };
+    fromPicker();
+    display.addEventListener('input', () => {
+      picker.value = dateInputISO(display.value);
+      display.setCustomValidity(display.value.trim() && !picker.value ? 'Enter a valid date as DD/MM/YYYY.' : '');
+    });
+    picker.addEventListener('input', fromPicker);
+    picker.addEventListener('change', fromPicker);
+    picker.addEventListener('click', event => {
+      if (typeof picker.showPicker === 'function') {
+        try { picker.showPicker(); event.preventDefault(); } catch { /* Native calendar remains the fallback. */ }
+      }
+    });
+    picker.form?.addEventListener('reset', () => queueMicrotask(fromPicker));
   });
 }
