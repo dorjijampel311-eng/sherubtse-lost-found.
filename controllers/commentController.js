@@ -26,3 +26,14 @@ exports.create = async (req,res,next) => {
     next(error);
   }
 };
+
+exports.deleteOwned = async (req,res,next) => {
+  try {
+    if (!validId(req.params.id) || !validId(req.params.commentId)) return res.status(404).json({ error: 'Your comment could not be found.' });
+    if (req.body?.confirmed !== true) return res.status(400).json({ error: 'Confirm deleting your comment.' });
+    // Ownership comes from the stored row and authenticated session, never the request body.
+    const result = await commentModel.deleteOwned(req.params.id,req.params.commentId,currentUser(req).id);
+    if (!result.rowCount) return res.status(404).json({ error: 'Your comment could not be found.' });
+    res.json({ ok: true, message: 'Comment deleted.' });
+  } catch (error) { next(error); }
+};

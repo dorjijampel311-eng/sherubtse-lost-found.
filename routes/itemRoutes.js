@@ -9,6 +9,7 @@ const upload = require('../middleware/upload');
 const { createReportLimit } = require('../middleware/rateLimits');
 router.get('/items/:id/comments', comments.list);
 router.post('/items/:id/comments', requireUser, commentLimit, comments.create);
+router.delete('/items/:id/comments/:commentId', requireUser, comments.deleteOwned);
 router.get('/items/:id/commenters/:userId', requireUser, users.commenterProfile);
 router.get('/items', controller.listItems);
 router.get('/items/:id/photo', controller.itemPhoto);

@@ -487,7 +487,11 @@ function commentSection(item) {
   return `<details class="item-comments" data-comments-item="${escapeHtml(item.id)}"><summary>Comments (<span data-comment-count>${escapeHtml(item.commentCount || 0)}</span>)</summary><div data-comments-body><p class="muted">Loading comments...</p></div></details>`;
 }
 function commentRows(comments) {
-  return comments.map(comment => `<article class="comment-row"><div class="comment-topline"><button type="button" class="comment-author" aria-haspopup="dialog" data-commenter="${escapeHtml(comment.userId)}">${escapeHtml(comment.name)}</button><time datetime="${escapeHtml(comment.createdAt)}">${escapeHtml(new Date(comment.createdAt).toLocaleString())}</time></div><p>${escapeHtml(comment.body)}</p></article>`).join('');
+  return comments.map(comment => {
+    const own = Boolean(state.user && comment.userId != null && String(comment.userId) === String(state.user.id));
+    const remove = own ? `<button type="button" class="comment-delete" data-delete-comment="${escapeHtml(comment.id)}" aria-label="Delete your comment">Delete</button>` : '';
+    return `<article class="comment-row"><div class="comment-topline"><button type="button" class="comment-author" aria-haspopup="dialog" data-commenter="${escapeHtml(comment.userId)}">${escapeHtml(comment.name)}</button><time datetime="${escapeHtml(comment.createdAt)}">${escapeHtml(new Date(comment.createdAt).toLocaleString())}</time>${remove}</div><p>${escapeHtml(comment.body)}</p></article>`;
+  }).join('');
 }
 async function loadComments(details, notice = '') {
   const target = details.querySelector('[data-comments-body]');
@@ -532,6 +536,8 @@ function initComments() {
     finally { button.disabled = false; button.textContent = 'Post comment'; }
   });
   document.addEventListener('click', async event => {
+    const removeComment = event.target.closest('[data-delete-comment]');
+    if (removeComment) { await deleteOwnComment(removeComment); return; }
     const retry = event.target.closest('[data-comments-retry]');
     if (retry) { await loadComments(retry.closest('[data-comments-item]')); return; }
     const older = event.target.closest('[data-comments-before]');
@@ -559,4 +565,25 @@ function initComments() {
       content.innerHTML = `<h3>${escapeHtml(user.name)}</h3><dl><dt>Phone number</dt><dd><a href="tel:${encodeURIComponent(user.phone)}">${escapeHtml(user.phone)}</a></dd><dt>Course / programme</dt><dd>${escapeHtml(user.course)}</dd><dt>Academic year</dt><dd>${escapeHtml(user.year)}</dd></dl>`;
     } catch (error) { if (requestId === profileRequest && dialog.open) content.innerHTML = `<p class="form-message" role="alert">${escapeHtml(error.message)}</p>`; }
   });
+}
+
+async function deleteOwnComment(button) {
+  if (button.disabled || !confirm('Delete your comment permanently?')) return;
+  const details = button.closest('[data-comments-item]');
+  const draft = details.querySelector('.comment-form textarea')?.value || '';
+  button.disabled = true; button.textContent = 'Deleting...';
+  try {
+    await api(`/api/items/${encodeURIComponent(details.dataset.commentsItem)}/comments/${encodeURIComponent(button.dataset.deleteComment)}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true })
+    });
+    const count = details.querySelector('[data-comment-count]');
+    if (count) count.textContent = String(Math.max(0, Number(count.textContent) - 1));
+    await loadComments(details, 'Comment deleted.');
+    const textarea = details.querySelector('.comment-form textarea');
+    if (textarea) textarea.value = draft;
+  } catch (error) {
+    const message = details.querySelector('[data-comment-message]');
+    if (message) { message.classList.remove('success'); message.textContent = error.message; }
+    else alert(error.message);
+  } finally { button.disabled = false; button.textContent = 'Delete'; }
 }

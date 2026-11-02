@@ -195,6 +195,22 @@ function itemForm(kind = 'found') {
     const thread = await request(commentPath); assert.equal(thread.status, 200); assert.equal(thread.data.comments.length, 1); assert.equal(thread.data.total, 1);
     assert.equal(thread.data.comments[0].userId, other.id); assert.equal(thread.data.comments[0].name, 'Integration check');
     assert.equal(thread.data.comments[0].phone, undefined); assert.equal(thread.data.comments[0].email, undefined);
+    const deletable = await request(commentPath, { method:'POST', cookie:other.cookie, json:{ body:'Temporary comment to delete.' } });
+    assert.equal(deletable.status,201);
+    const deleteCommentPath = `${commentPath}/${deletable.data.id}`;
+    assert.equal((await request(deleteCommentPath,{ method:'DELETE',json:{confirmed:true} })).status,401);
+    assert.equal((await request(deleteCommentPath,{ method:'DELETE',cookie:owner.cookie,json:{confirmed:true,userId:other.id} })).status,404);
+    assert.equal((await pool.query('SELECT id FROM item_comments WHERE id=$1',[deletable.data.id])).rowCount,1);
+    assert.equal((await request(deleteCommentPath,{ method:'DELETE',cookie:other.cookie,json:{} })).status,400);
+    assert.equal((await request(`/api/items/${legacy.rows[0].id}/comments/${deletable.data.id}`,{ method:'DELETE',cookie:other.cookie,json:{confirmed:true} })).status,404);
+    const removedComment = await request(deleteCommentPath,{ method:'DELETE',cookie:other.cookie,json:{confirmed:true} });
+    assert.equal(removedComment.status,200); assert.equal(removedComment.data.ok,true);
+    assert.equal((await pool.query('SELECT id FROM item_comments WHERE id=$1',[deletable.data.id])).rowCount,0);
+    assert.equal((await request(commentPath)).data.total,1);
+    assert.equal((await request('/api/items?id='+id)).data.items[0].commentCount,1);
+    assert.equal((await request(deleteCommentPath,{ method:'DELETE',cookie:other.cookie,json:{confirmed:true} })).status,404);
+    console.log('PASS: own-comment deletion, explicit confirmation, anonymous/cross-owner/item-mismatch rejection, forged user-ID rejection and updated counts.');
+
     const profilePath = `/api/items/${id}/commenters/${other.id}`;
     assert.equal((await request(profilePath)).status, 401);
     const contact = await request(profilePath, { cookie: owner.cookie }); assert.equal(contact.status, 200);
