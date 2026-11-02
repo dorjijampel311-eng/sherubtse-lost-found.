@@ -149,7 +149,7 @@ function itemForm(kind = 'found') {
     assert.equal((await request('/api/items?mine=1', { cookie: owner.cookie })).data.items.some(item => item.id === id), true);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: owner.cookie })).status, 204);
     // Avoid sending any actual notifications from verification.
-    if (!process.env.SMTP_HOST) {
+    if (!process.env.MAIL_WEB_APP_URL) {
       const lost = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: itemForm('lost') });
       assert.equal(lost.status, 201); assert.equal(lost.data.notification.status, 'unconfigured');
     }

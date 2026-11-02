@@ -85,6 +85,13 @@ async function initBrowse() {
 }
 
 function bindAuthForms() {
+  const loginForm = document.querySelector('#login-form');
+  const loginNotice = sessionStorage.getItem('loginNotice');
+  if (loginForm && loginNotice) {
+    loginForm.elements.email.value = sessionStorage.getItem('authEmail') || '';
+    message(loginNotice, true);
+    sessionStorage.removeItem('loginNotice');
+  }
   document.querySelector('#signup-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -300,6 +307,12 @@ function initCodeForms() {
       });
       message(result.message, true);
       form.elements.code.value = '';
+      if (form.dataset.codeForm === 'verify') {
+        sessionStorage.setItem('authEmail', values.email.trim().toLowerCase());
+        sessionStorage.setItem('loginNotice', 'Email verified successfully. Sign in to continue.');
+        location.replace('/login');
+        return;
+      }
       if (form.elements.password) { form.elements.password.value = ''; form.elements.confirmPassword.value = ''; }
       document.querySelector('#auth-complete').hidden = false;
     } catch (error) { message(error.message); }
