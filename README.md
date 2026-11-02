@@ -20,7 +20,7 @@ Registration requires exactly eight digits, a matching email such as `07240068.s
 
 Passwords use bcrypt hashes. PostgreSQL stores sessions; cookies are HTTP-only, SameSite=Lax and secure in production. Profile requests use the signed-in user's ID. Students can change their display name, programme, year, phone, profile photo and notification preference. College email and student number are immutable.
 
-Item and profile photos accept JPEG, PNG and WebP, up to 2 MB, with server-side signature and MIME checks. Public listings show name and programme; college email appears to signed-in users, while a phone appears only if the poster chooses to share it for that listing. Verify ownership privately before handing over an item. This board supplies no official college contact details.
+Item and profile photos accept JPEG, PNG and WebP, up to 2 MB, with server-side signature and MIME checks. Public listings show name and programme; college email appears to signed-in users, while all new listings require public phone sharing. Older listings keep their saved phone-sharing setting. Verify ownership privately before handing over an item. This board supplies no official college contact details.
 
 ## Email configuration
 
@@ -56,7 +56,7 @@ Sending occurs during the publish request, in batches of three. This is suitable
 2. Build command: `npm ci`. Start command: `npm start`.
 3. Set `DATABASE_URL` to the database's Internal Database URL, `NODE_ENV=production`, a strong stable `SESSION_SECRET`, and the appropriate `PGSSLMODE`.
 4. Add the SMTP variables above and set `APP_BASE_URL` to the actual HTTPS Render service origin. Confirm your hosting plan supports the provider's SMTP connection and outbound ports.
-5. Deploy, check `/health`, then test registration, login, profile update, posting with/without photos, private/public phone choices, ownership controls, returned/deleted posts and email opt-out using controlled student test accounts.
+5. Deploy, check `/health`, then test registration, login, profile update, posting with/without photos, mandatory phone sharing and preserved legacy privacy settings, ownership controls, returned/deleted posts and email opt-out using controlled student test accounts.
 
 ## Validation
 
@@ -185,3 +185,7 @@ Render settings:
 A timeout alone cannot identify the remote network cause. If retries fail, check the current Render database URL and credentials, matching workspace/region, database availability/expiration, external access rules (for external URLs), and connection limits. Wrong credentials/unknown database names are not fixed by retries. Increasing timeouts does not make an unreachable internal hostname reachable. Use the sanitized code/cause in the new logs to distinguish these cases.
 
 `npm test` includes database URL/TLS configuration, singleton pool construction, retry exhaustion, fail-fast authentication, occupied-port failures, cleanup, signal cancellation during initialization, readiness and secret-redaction tests. `npm run test:auth:db` and `npm run test:integration` exercise the existing features against your development PostgreSQL database with all email mocked.
+
+## Required phone contact for new posts
+
+Lost and found forms require an unchecked-by-default confirmation that the student's registered phone number will be public on the listing. Browser and backend validation reject a new post without that confirmation, and new posts store `phone_public=TRUE`. The account must have a phone number. Existing posts are not modified; a previously private phone remains private. Notification emails still omit the poster's phone number.

@@ -35,7 +35,9 @@ exports.createItem = async (req, res, next) => {
       return res.status(400).json({ error: 'Check the item name, category, location, and date.' });
     }
     if (req.file && !photoMatches(req.file)) return res.status(400).json({ error: 'Photo must be a valid JPG, PNG, or WebP image.' });
-    const phonePublic = req.body?.phonePublic === 'on';
+    if (req.body?.phonePublic !== 'on') return res.status(400).json({ error: 'Phone sharing is required. Confirm that your phone number will appear publicly on this listing.' });
+    if (!currentUser(req).phone?.trim()) return res.status(400).json({ error: 'Add a phone number to your profile before posting.' });
+    const phonePublic = true;
     const photoMime = req.file?.mimetype || null;
     const photoData = req.file?.buffer || null;
     const result = await itemModel.create([currentUser(req).id, kind, title, category, description, location, itemDate, phonePublic, photoMime, photoData]);

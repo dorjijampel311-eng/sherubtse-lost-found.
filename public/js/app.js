@@ -138,6 +138,7 @@ function bindItemForm() {
     event.preventDefault();
     const form = event.currentTarget;
     if (!state.user) { location.href = `/login?next=${encodeURIComponent(location.pathname)}`; return; }
+    if (!form.elements.phonePublic.checked) return message('Phone sharing is required. Confirm that your number will be shown publicly on this listing.');
     const button = form.querySelector('button[type="submit"]'); button.disabled = true;
     const values = new FormData(form);
     if (!validPhoto(form)) { button.disabled = false; return; }

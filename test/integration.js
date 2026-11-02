@@ -26,7 +26,7 @@ function profileForm(extra = {}) {
 }
 function itemForm(kind = 'found') {
   const form = new FormData();
-  for (const [key, value] of Object.entries({ kind, title: 'Temporary integration check', category: 'Other', description: 'Automatically removed after verification.', location: 'Test location', itemDate: '2026-10-31' })) form.set(key, value);
+  for (const [key, value] of Object.entries({ kind, phonePublic: 'on', title: 'Temporary integration check', category: 'Other', description: 'Automatically removed after verification.', location: 'Test location', itemDate: '2026-10-31' })) form.set(key, value);
   return form;
 }
 (async () => {
@@ -112,6 +112,13 @@ function itemForm(kind = 'found') {
     assert.equal((await request('/api/profile', { method: 'PUT', cookie: owner.cookie, body: profileForm({ year: 'Staff' }) })).status, 400);
     assert.equal((await request('/api/profile', { method: 'PUT', cookie: owner.cookie, body: profileForm() })).status, 200);
     assert.equal((await request('/api/profile', { method: 'PUT', body: profileForm() })).status, 401);
+    for (const kind of ['lost', 'found']) {
+      const missingPhoneConsent = itemForm(kind); missingPhoneConsent.delete('phonePublic');
+      assert.equal((await request('/api/items', { method: 'POST', cookie: owner.cookie, body: missingPhoneConsent })).status, 400);
+    }
+    const legacy = await pool.query(`INSERT INTO item_reports(user_id,kind,title,category,description,location,item_date,phone_public)
+      VALUES($1,'lost','Temporary old privacy check','Other','Legacy private listing','Test location','2026-11-02',FALSE) RETURNING id`, [owner.id]);
+    assert.equal((await request('/api/items?id=' + legacy.rows[0].id)).data.items[0].phone, null);
     const invalid = itemForm(); invalid.set('photo', new Blob(['invalid'], { type: 'image/png' }), 'invalid.png');
     assert.equal((await request('/api/items', { method: 'POST', cookie: owner.cookie, body: invalid })).status, 400);
     const oversized = itemForm(); oversized.set('photo', new Blob([new Uint8Array(2 * 1024 * 1024 + 1)], { type: 'image/png' }), 'large.png');
@@ -138,7 +145,7 @@ function itemForm(kind = 'found') {
     assert.equal(foundEvents[0].phone, undefined);
     console.log('PASS: found-item posting calls its separate notifier with saved item details and uploaded photo.');
     const anonymous = await request(`/api/items?id=${id}`);
-    assert.equal(anonymous.data.items[0].phone, null); assert.equal(anonymous.data.items[0].email, null);
+    assert.equal(anonymous.data.items[0].phone, '+975 17123456'); assert.equal(anonymous.data.items[0].phonePublic, true); assert.equal(anonymous.data.items[0].email, null);
     const signed = await request(`/api/items?id=${id}`, { cookie: other.cookie });
     assert.equal(signed.data.items[0].email, owner.email);
     assert.equal((await fetch(base + `/api/items/${id}/photo`)).status, 200);
