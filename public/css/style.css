@@ -63,3 +63,11 @@ body{background:var(--canvas);color:var(--ink)}.site-header{background:#fffdf6;c
 .comment-delete{margin-left:auto;flex-shrink:0;border:1px solid #e5cfc7;border-radius:6px;padding:4px 8px;background:#fffaf7;color:#9d392f;font:600 11px 'DM Sans',Arial,sans-serif;cursor:pointer}.comment-delete:hover{background:#fff0e9}.comment-delete:focus-visible{outline:2px solid #9d392f;outline-offset:2px}.comment-delete:disabled{opacity:.6;cursor:wait}
 
 .site-footer .footer-bottom{display:flex;justify-content:center;align-items:center;text-align:center}
+
+/* Keep navigation geometry stable while page content loads. */
+html{scrollbar-gutter:stable}.nav-wrap{flex-wrap:wrap}.nav-links{flex-shrink:0}.nav-links>a{flex-shrink:0}.nav-account{flex-shrink:0}.nav-account .account-name{flex:0 0 85px;width:85px}
+@media(min-width:721px) and (max-width:1100px){.nav-account{margin-left:auto}.nav-links{order:3;flex-basis:100%;padding-bottom:4px}}
+/* Reserve text slots so the web-font swap cannot move adjacent links. */
+.nav-wrap>.brand{width:170px}.nav-account .account-action{width:65px;text-align:center;flex-shrink:0}.nav-account [data-logout]{width:72px}.nav-account a[href="/signup"]{width:57px}
+@media(min-width:721px){.nav-links>a{text-align:center;line-height:22px}.nav-links>a[href="/"]{width:40px}.nav-links>a[href="/browse"]{width:82px}.nav-links>a[href="/report-lost"]{width:72px}.nav-links>a[href="/report-found"]{width:85px}.nav-links>a[href="/my-items"]{width:58px}.nav-links>a[href="/about"]{width:42px}}
+@media(max-width:720px){.nav-wrap>.brand{width:137px}.nav-links>a{line-height:22px}.nav-account .account-action{width:57px}.nav-account [data-logout]{width:64px}}

@@ -18,20 +18,29 @@ function message(text, success = false) {
   element.classList.toggle('success', success);
 }
 
-async function loadAccount() {
-  try { state.user = (await api('/api/auth/me')).user; } catch { state.user = null; }
-  const target = document.querySelector('[data-account]');
-  if (target) {
-    target.innerHTML = state.user
-      ? `<a class="account-name" href="/profile">${escapeHtml(state.user.name)}</a><a class="account-action" href="/profile">Profile</a>${state.user.role === 'admin' ? '<a class="account-action" href="/admin">Admin</a>' : ''}<a class="account-action" href="#" data-logout>Log out</a>`
-      : '<a class="account-action" href="/login">Log in</a><a class="account-action" href="/signup">Join</a>';
-    target.querySelector('[data-logout]')?.addEventListener('click', async event => {
+async function loadAccount({ refresh = false } = {}) {
+  if (refresh) {
+    try {
+      const result = await api('/api/auth/me');
+      // Only a confirmed session change warrants a new server-rendered page.
+      if (!result.user || result.user.role !== state.user?.role) { location.reload(); return; }
+      state.user = result.user;
+      const name = document.querySelector('.nav-account .account-name');
+      if (name) { name.textContent = state.user.name; name.title = state.user.name; }
+    } catch { /* Keep the verified navbar in place on a transient network failure. */ }
+  } else {
+    const bootstrap = document.querySelector('#session-user');
+    state.user = bootstrap ? JSON.parse(bootstrap.textContent) : null;
+  }
+  const logout = document.querySelector('[data-logout]');
+  if (logout && logout.dataset.bound !== 'true') {
+    logout.dataset.bound = 'true';
+    logout.addEventListener('click', async event => {
       event.preventDefault();
-      try { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; }
+      try { await api('/api/auth/logout', { method:'POST' }); location.href = '/'; }
       catch (error) { alert(error.message); }
     });
   }
-  document.querySelectorAll('[data-auth-link]').forEach(link => { link.hidden = !state.user; });
 }
 
 function formattedDate(value) {
@@ -188,6 +197,8 @@ function initMobileMenu() {
     const open = links.classList.toggle('open');
     button.setAttribute('aria-expanded', String(open));
     button.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    // Render the next page with the same menu state, rather than reopening it after load.
+    document.cookie = `sherubtse_nav_open=${open ? '1' : '0'}; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
   });
 }
 
@@ -234,7 +245,7 @@ function initProfile() {
       state.user = (await api('/api/profile', { method: 'PUT', body: values })).user;
       message('Profile saved.', true);
       if (state.user.hasPhoto) { photo.src = `/api/profile/photo?t=${Date.now()}`; photo.hidden = false; }
-      await loadAccount();
+      await loadAccount({ refresh: true });
     } catch (error) { message(error.message); }
     finally { button.disabled = false; button.textContent = 'Save profile'; }
   });

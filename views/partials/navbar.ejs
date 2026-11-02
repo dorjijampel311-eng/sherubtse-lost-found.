@@ -1,0 +1,19 @@
+<header class="site-header"><nav class="nav-wrap" aria-label="Main navigation">
+  <a class="brand" href="/"><img src="/Sherubtse_logo/images.jpg" alt="Sherubtse College crest"><span><strong>Sherubtse</strong><small>Lost &amp; Found</small></span></a>
+  <% const menuOpen = typeof navOpen !== 'undefined' && navOpen; %>
+  <button type="button" class="menu-toggle" aria-label="<%= menuOpen ? 'Close menu' : 'Open menu' %>" aria-expanded="<%= menuOpen ? 'true' : 'false' %>" aria-controls="main-nav-links">&#9776;</button>
+  <div class="nav-links<%= menuOpen ? ' open' : '' %>" id="main-nav-links">
+    <% const links = [{ href:'/', label:'Home' },{ href:'/browse', label:'Browse items' },{ href:'/report-lost', label:'Report lost' },{ href:'/report-found', label:'Report found' },{ href:'/my-items', label:'My posts', account:true },{ href:'/about', label:'About' }]; %>
+    <% for (const link of links) { if (link.account && !navUser) continue; %>
+      <a href="<%= link.href %>"<% if (currentPage === link.href) { %> class="active" aria-current="page"<% } %><% if (link.account) { %> data-auth-link<% } %>><%= link.label %></a>
+    <% } %>
+  </div>
+  <div class="nav-account" data-account>
+    <% if (navUser) { %>
+      <a class="account-name" href="/profile" title="<%= navUser.name %>"><%= navUser.name %></a><a class="account-action" href="/profile">Profile</a><% if (navUser.role === 'admin') { %><a class="account-action" href="/admin">Admin</a><% } %><a class="account-action" href="#" data-logout>Log out</a>
+    <% } else { %>
+      <a class="account-action" href="/login">Log in</a><a class="account-action" href="/signup">Join</a>
+    <% } %>
+  </div>
+</nav></header>
+<script id="session-user" type="application/json"><%- sessionJSON %></script>

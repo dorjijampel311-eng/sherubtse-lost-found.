@@ -63,6 +63,45 @@ function itemForm(kind = 'found') {
       assert.ok(fixture.cookie);
     }
     const [owner, other] = users;
+    // Navigation, direct loads and refreshes must receive the correct navbar in HTML.
+    const navigation = ['/browse', '/report-lost', '/report-found', '/my-items', '/', '/about', '/profile', '/login', '/signup', '/verify', '/reset-password'];
+    for (const page of [...navigation, ...navigation]) {
+      for (const cookie of [owner.cookie, null]) {
+        const response = await fetch(base + page, { headers: cookie ? { Cookie: cookie } : {} });
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get('cache-control'), /private, no-store/);
+        const html = await response.text();
+        const header = html.match(/<header class="site-header">[\s\S]*?<\/header>/)[0];
+        assert.equal(header.includes('My posts'), Boolean(cookie), page);
+        assert.equal(header.includes('data-logout'), Boolean(cookie), page);
+        assert.equal(header.includes('>Log in<'), !cookie, page);
+        assert.ok(!header.includes(' hidden'));
+        if (cookie) { assert.ok(header.includes('Integration check')); assert.ok(header.includes('>Profile<')); }
+      }
+    }
+    const originalFind = userModel.findById;
+    let releaseLookup, lookupStarted;
+    const started = new Promise(resolve => { lookupStarted = resolve; });
+    const gate = new Promise(resolve => { releaseLookup = resolve; });
+    userModel.findById = async (...args) => { lookupStarted(); await gate; return originalFind(...args); };
+    try {
+      let responseReceived = false;
+      const pending = fetch(base + '/browse', { headers: { Cookie: owner.cookie } }).then(response => { responseReceived = true; return response; });
+      await started;
+      assert.equal(responseReceived, false, 'No guest HTML may be sent while authentication is pending');
+      releaseLookup();
+      assert.ok((await (await pending).text()).includes('data-logout'));
+    } finally { releaseLookup(); userModel.findById = originalFind; }
+    console.log('PASS: shared authenticated/visitor navigation, direct loads, refreshes and delayed session lookup without intermediate guest HTML.');
+    for (const page of ['/browse', '/report-lost', '/report-found', '/my-items']) {
+      const html = await (await fetch(base + page, { headers:{ Cookie:owner.cookie + '; sherubtse_nav_open=1' } })).text();
+      assert.ok(html.includes('class="nav-links open"'));
+      assert.ok(html.includes('aria-expanded="true"'));
+    }
+    // A display preference must never grant access or show account links to a visitor.
+    const guestMenu = await (await fetch(base + '/browse', { headers:{ Cookie:'sherubtse_nav_open=1' } })).text();
+    assert.ok(!guestMenu.includes('data-auth-link'));
+    if (process.argv.includes('--navbar-browser')) await require('./navbar-browser')(base, owner.cookie);
     // Check recipient policy against PostgreSQL, without sending any email.
     await pool.query('UPDATE portal_users SET notifications_enabled=TRUE WHERE id=$1', [other.id]);
     let eligible = (await userModel.notificationRecipients(owner.id)).rows;

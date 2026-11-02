@@ -9,3 +9,4 @@ require('./date-field.test');
 require('./comments.test');
 require('./returned-cleanup.test');
 require('./admin-ui.test');
+require('./navbar.test');
