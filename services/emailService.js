@@ -17,6 +17,13 @@ function emailConfiguration() {
   return { configured: missing.length === 0 && invalid.length === 0, missing, invalid };
 }
 function emailConfigured() { return emailConfiguration().configured; }
+function mailFailure(reason, httpStatus) {
+  const diagnostic = { reason };
+  if (Number.isInteger(httpStatus)) diagnostic.httpStatus = httpStatus;
+  // Fixed reason codes only: never log recipients, message bodies, URLs, secrets or provider response text.
+  console.warn('Email web app delivery failed:', JSON.stringify(diagnostic));
+  return false;
+}
 async function postEmail({ to, subject, text, html = '' }) {
   if (!emailConfigured()) return false;
   try {
@@ -28,10 +35,13 @@ async function postEmail({ to, subject, text, html = '' }) {
       body: JSON.stringify({ secret: process.env.MAIL_WEB_APP_SECRET, to, subject, text,
         html: html.replaceAll('cid:sherubtse-logo', logoUrl) })
     });
-    if (!response.ok) return false;
-    const result = await response.json();
-    return result?.ok === true;
-  } catch { return false; }
+    if (!response.ok) return mailFailure([401, 403].includes(response.status) ? 'WEB_APP_ACCESS_DENIED' : 'HTTP_ERROR', response.status);
+    let result;
+    try { result = await response.json(); }
+    catch (error) { return mailFailure(['TimeoutError', 'AbortError'].includes(error?.name) ? 'TIMEOUT' : 'INVALID_JSON'); }
+    if (result?.ok !== true) return mailFailure(result?.ok === false ? 'WEB_APP_REJECTED' : 'MISSING_SUCCESS_FLAG');
+    return true;
+  } catch (error) { return mailFailure(['TimeoutError', 'AbortError'].includes(error?.name) ? 'TIMEOUT' : 'NETWORK_ERROR'); }
 }
 async function notifyItem(item, kind) {
   if (kind === 'found' && !/^\d+$/.test(String(item.posterId))) return { status: 'failed', message: 'Your post was saved, but email notifications could not be sent.' };

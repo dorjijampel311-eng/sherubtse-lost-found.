@@ -5,7 +5,10 @@ let recipients = [];
 let queries = [];
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: { pool: { query: async (sql, values) => { assert.match(sql, /notifications_enabled=TRUE/); assert.match(sql, /email_verified=TRUE/); queries.push({ sql, values }); return { rows: recipients }; } } } };
 const originalFetch = global.fetch;
-after(() => { global.fetch = originalFetch; });
+const originalWarn = console.warn;
+const diagnostics = [];
+console.warn = (...args) => diagnostics.push(args.join(' '));
+after(() => { global.fetch = originalFetch; console.warn = originalWarn; });
 let sent = [], fail = false, mode = 'success';
 global.fetch = async (url, options) => {
   assert.equal(url, process.env.MAIL_WEB_APP_URL);
@@ -17,7 +20,7 @@ global.fetch = async (url, options) => {
   sent.push(payload);
   if (fail || mode === 'network') throw new Error('Web app unavailable');
   if (mode === 'timeout') throw new DOMException('Timed out', 'TimeoutError');
-  return { ok: mode !== 'http-error', json: async () => {
+  return { ok: !['http-error', 'http-unauthorized'].includes(mode), status: mode === 'http-unauthorized' ? 401 : mode === 'http-error' ? 500 : 200, json: async () => {
     if (mode === 'invalid-json') throw new SyntaxError('Invalid JSON');
     if (mode === 'empty-result') return {};
     if (mode === 'null-result') return null;
@@ -134,7 +137,7 @@ test('HTTP errors, ok:false, invalid JSON, network errors and timeout fail witho
   let timeoutMs;
   AbortSignal.timeout = ms => { timeoutMs = ms; return new AbortController().signal; };
   try {
-    for (mode of ['http-error', 'rejected', 'invalid-json', 'empty-result', 'null-result', 'string-success', 'network', 'timeout']) {
+    for (mode of ['http-error', 'http-unauthorized', 'rejected', 'invalid-json', 'empty-result', 'null-result', 'string-success', 'network', 'timeout']) {
       assert.deepEqual(await sendAuthCode({ email: '07240068.sherubtse@rub.edu.bt', code: '01234567', purpose: 'verify' }), { status: 'failed' });
       assert.equal(timeoutMs, 15000);
     }
@@ -168,4 +171,14 @@ test('safe configuration diagnostics expose variable names only and never requir
     process.env.MAIL_WEB_APP_URL = 'https://script.google.com/macros/s/test/exec';
     assert.equal(emailConfiguration().configured, true);
   } finally { Object.assign(process.env, saved); }
+});
+
+test('access-denied diagnostics identify the remote deployment problem without exposing message data', async () => {
+  diagnostics.length = 0; mode = 'http-unauthorized';
+  try {
+    assert.deepEqual(await sendAuthCode({ email: '07240068.sherubtse@rub.edu.bt', code: '01234567', purpose: 'reset' }), { status: 'failed' });
+    assert.equal(diagnostics.length, 1);
+    assert.ok(diagnostics[0].includes('WEB_APP_ACCESS_DENIED')); assert.ok(diagnostics[0].includes('401'));
+    for (const value of ['07240068.sherubtse@rub.edu.bt', '01234567', process.env.MAIL_WEB_APP_SECRET, process.env.MAIL_WEB_APP_URL]) assert.ok(!diagnostics[0].includes(value));
+  } finally { mode = 'success'; }
 });

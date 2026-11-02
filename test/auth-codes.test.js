@@ -67,3 +67,10 @@ test('missing or failed email never leaves a usable code; unknown addresses rece
   assert.equal((await service.issue('00000000.sherubtse@rub.edu.bt', 'reset')).status, 'ineligible');
   assert.equal(state.mail.length, 1);
 });
+
+test('password-reset email is independent of item-notification opt-in and does not verify the account', async () => {
+  const { state, service, email } = setup(); state.user.notifications_enabled = false;
+  assert.equal((await service.issue(email, 'reset')).status, 'accepted');
+  assert.equal(state.mail.length, 1); assert.equal(state.mail[0].purpose, 'reset');
+  assert.equal(state.record.minutes, 30); assert.equal(state.user.email_verified, false);
+});

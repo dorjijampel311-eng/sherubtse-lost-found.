@@ -41,7 +41,11 @@ if (require.main === module) {
   });
   start({ onRuntime: value => { runtime = value; if (stopping) stop(); } }).catch(error => {
     if (stopping && error.code === 'STARTUP_CANCELLED') return;
-    logError('Unable to start the app:', error); process.exitCode = 1;
+    logError('Unable to start the app:', error);
+    if (error.code === 'EADDRINUSE') {
+      console.error('The HTTP port is already in use. Stop the existing server with Ctrl+C in its terminal before running npm start again.');
+    }
+    process.exitCode = 1;
   });
 }
 // Existing tests/integrations can import app without starting a listener.
