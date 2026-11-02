@@ -7,3 +7,4 @@ require('./listing-actions.test');
 require('./password-toggle.test');
 require('./date-field.test');
 require('./comments.test');
+require('./returned-cleanup.test');

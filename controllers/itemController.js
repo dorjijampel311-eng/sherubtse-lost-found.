@@ -49,10 +49,10 @@ exports.createItem = async (req, res, next) => {
 
 exports.markReturned = async (req, res, next) => {
   try {
-    if (!/^\d+$/.test(req.params.id) || req.body?.status !== 'returned') return res.status(400).json({ error: 'Invalid listing update.' });
+    if (!/^\d+$/.test(req.params.id) || req.body?.status !== 'returned' || req.body?.confirmed !== true) return res.status(400).json({ error: 'Confirm marking this item returned. It will be deleted automatically after 7 days.' });
     const result = await itemModel.markReturned([req.params.id, currentUser(req).id]);
     if (!result.rowCount) return res.status(404).json({ error: 'Your listing could not be found.' });
-    res.json({ ok: true });
+    res.json({ ok: true, ...result.rows[0] });
   } catch (error) { next(error); }
 };
 

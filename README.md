@@ -201,3 +201,13 @@ Startup adds the `item_comments` table and its item/thread index without modifyi
 ## Found-only item notifications
 
 Only creating a new FOUND listing triggers item email notifications. LOST posts, comments, returned-status changes and deletions do not trigger them. Found notifications say ?Someone has found an item?could it be yours?? and include the title, category, location, date found and item-view link, using the existing web-app sender. Existing recipient privacy rules remain: verified registered accounts with notifications enabled, excluding the poster. Failed delivery leaves the item saved and is not reported as successful.
+
+## Automatic deletion of returned items
+
+The existing Mark returned button now asks the owner to confirm that the post, comments and image will be removed after seven days. The API requires `status: "returned"` and `confirmed: true` and still checks ownership. PostgreSQL records the first confirmation in `returned_at`; repeating the request does not extend the deadline. The owner sees the scheduled deletion time in My posts. Manual deletion remains available.
+
+Startup adds the nullable `returned_at` column and a partial expiry index. It does not infer or backdate a return time for historical returned rows. Only rows whose status is returned and whose recorded return time is at least 168 hours old are eligible. Open posts and historical returned posts with no recorded confirmation timestamp are never deleted by this job.
+
+A bounded batch of up to 200 overdue posts is deleted on server startup and every five minutes while the server runs. PostgreSQL cascades the deletion to item comments; image bytes are stored in the post row and are deleted with it. Cleanup uses row locks with SKIP LOCKED so concurrent app instances do not process the same rows, and it does not overlap its own runs. Failures are logged safely and retried on the next pass. Shutdown stops the job before closing the shared database pool.
+
+On Render Free the process can sleep. The deadline remains stored in PostgreSQL, and overdue posts are cleaned up on the next startup/wake. A sleeping service cannot physically delete at the exact deadline; exact wall-clock execution requires an external scheduled worker/database job. No new external service or environment variable is required for the built-in cleanup.

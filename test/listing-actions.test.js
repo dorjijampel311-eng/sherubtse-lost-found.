@@ -33,3 +33,13 @@ test('deletion requires confirmation, sends DELETE and refreshes the listing vie
   context.confirm = () => true; await container.onclick(event);
   assert.equal(requests, 1); assert.equal(refreshes, 1); assert.equal(button.disabled, false);
 });
+
+test('mark returned requires confirmation and submits the explicit confirmed flag', async () => {
+  const context = browser(); let requests = 0;
+  context.fetch = async (url, options) => { requests++; assert.equal(options.method, 'PATCH'); assert.deepEqual(JSON.parse(options.body), { status: 'returned', confirmed: true }); return { ok: true, json: async () => ({}) }; };
+  const container = {}, button = { disabled: false, textContent: 'Mark returned', dataset: { return: '7' } };
+  const event = { target: { closest: selector => selector === '[data-return]' ? button : null } };
+  context.bindListingActions(container, async () => {});
+  context.confirm = () => false; await container.onclick(event); assert.equal(requests, 0);
+  context.confirm = message => { assert.ok(message.includes('7 days')); return true; }; await container.onclick(event); assert.equal(requests, 1);
+});

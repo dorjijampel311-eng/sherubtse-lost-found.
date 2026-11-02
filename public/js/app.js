@@ -52,7 +52,7 @@ function card(item) {
   const tools = manageable && item.status !== 'returned'
     ? `<div class="item-actions"><button class="button button-small button-navy" data-return="${escapeHtml(item.id)}">Mark returned</button><button class="button button-small button-danger" data-delete="${escapeHtml(item.id)}">Delete post</button></div>`
     : manageable ? `<div class="item-actions"><button class="button button-small button-danger" data-delete="${escapeHtml(item.id)}">Delete post</button></div>` : '';
-  return `<article class="item-card" id="item-${escapeHtml(item.id)}">${photo}<div class="item-card-body"><div class="item-topline"><span class="status-badge ${statusClass}">${badge}</span><span class="category-badge">${escapeHtml(item.category)}</span></div><h3>${escapeHtml(item.title)}</h3><p class="item-description">${escapeHtml(item.description || 'No additional description was provided.')}</p><div class="item-meta"><span><b>Location</b> ${escapeHtml(item.location)}</span><span><b>Date</b> ${escapeHtml(formattedDate(item.itemDate))}</span><span><b>Posted by</b> ${escapeHtml(item.name)} · ${escapeHtml(item.course)}</span></div>${item.email ? `<a class="item-contact" href="mailto:${escapeHtml(item.email)}">Email poster</a>` : `<span class="muted">Sign in to see the poster&#39;s college email.</span>`}${phone}${tools}${commentSection(item)}</div></article>`;
+  return `<article class="item-card" id="item-${escapeHtml(item.id)}">${photo}<div class="item-card-body"><div class="item-topline"><span class="status-badge ${statusClass}">${badge}</span><span class="category-badge">${escapeHtml(item.category)}</span></div><h3>${escapeHtml(item.title)}</h3><p class="item-description">${escapeHtml(item.description || 'No additional description was provided.')}</p><div class="item-meta"><span><b>Location</b> ${escapeHtml(item.location)}</span><span><b>Date</b> ${escapeHtml(formattedDate(item.itemDate))}</span><span><b>Posted by</b> ${escapeHtml(item.name)} · ${escapeHtml(item.course)}</span></div>${item.email ? `<a class="item-contact" href="mailto:${escapeHtml(item.email)}">Email poster</a>` : `<span class="muted">Sign in to see the poster&#39;s college email.</span>`}${phone}${tools}${item.status === 'returned' && item.deleteAfter ? `<p class="return-expiry">Scheduled for automatic deletion after ${escapeHtml(new Date(item.deleteAfter).toLocaleString())}, including comments and photo.</p>` : ''}${commentSection(item)}</div></article>`;
 }
 
 async function fetchItems(mine = false) {
@@ -339,11 +339,12 @@ function bindListingActions(container, refresh) {
     if (!button || button.disabled) return;
     const id = button.dataset[remove ? 'delete' : 'return'];
     if (remove && !confirm('Delete this listing permanently?')) return;
+    if (returned && !confirm('Mark this item as returned? This post, its comments and photo will be deleted automatically after 7 days.')) return;
     const originalLabel = button.textContent;
     button.disabled = true; button.textContent = remove ? 'Deleting...' : 'Updating...';
     try {
       if (remove) await api(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      else await api(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'returned' }) });
+      else await api(`/api/items/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'returned', confirmed: true }) });
       await refresh();
     } catch (error) { alert(error.message); }
     finally { button.disabled = false; button.textContent = originalLabel; }

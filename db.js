@@ -36,6 +36,9 @@ async function initializeDatabase() {
       CHECK ((photo_data IS NULL AND photo_mime IS NULL) OR (photo_data IS NOT NULL AND photo_mime IN ('image/jpeg', 'image/png', 'image/webp')))
     );
 
+    ALTER TABLE item_reports ADD COLUMN IF NOT EXISTS returned_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS item_reports_returned_expiry_idx ON item_reports(returned_at) WHERE status='returned' AND returned_at IS NOT NULL;
+
     ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS photo_mime VARCHAR(30);
     ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS photo_data BYTEA;

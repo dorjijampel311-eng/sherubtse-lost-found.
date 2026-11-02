@@ -19,7 +19,7 @@ async function start({ onRuntime } = {}) {
         const admin = await bootstrapAdmin(currentPool);
         if (admin.status === 'pending') console.warn(admin.message);
         if (admin.status === 'promoted' || admin.status === 'ready') console.log('Configured administrator is ready. Sign in and open /admin.');
-      }, ...settings, onRuntime });
+      }, startMaintenance: () => require('./services/returnedCleanup').startReturnedCleanup({ purge: () => require('./models/itemModel').deleteExpiredReturned() }), ...settings, onRuntime });
     return runtime;
   } catch (error) {
     if (pool && !pool.ending) {

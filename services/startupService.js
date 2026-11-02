@@ -23,13 +23,14 @@ function listen(app, port, host) {
     server.once('error', failed); server.once('listening', ready);
   });
 }
-async function startApplication({ app, pool, initializeDatabase, bootstrapAdmin, port, logger = console, retry = {}, onRuntime = () => {} }) {
+async function startApplication({ app, pool, initializeDatabase, bootstrapAdmin, port, logger = console, retry = {}, onRuntime = () => {}, startMaintenance = async () => null }) {
   const state = app.locals.startup = { ready: false, shuttingDown: false };
-  let server, closing;
+  let server, closing, maintenance;
   const close = () => {
     if (closing) return closing;
     state.ready = false; state.shuttingDown = true;
     closing = (async () => {
+      await maintenance?.stop();
       if (server) await new Promise(resolve => {
         const timer = setTimeout(() => { server.closeAllConnections?.(); resolve(); }, 5000);
         server.close(() => { clearTimeout(timer); resolve(); });
@@ -49,6 +50,9 @@ async function startApplication({ app, pool, initializeDatabase, bootstrapAdmin,
       if (state.shuttingDown) { const error = new Error('Startup was cancelled during shutdown.'); error.code = 'STARTUP_CANCELLED'; throw error; }
     };
     await retryDatabase(async () => { checkClosing(); await initializeDatabase(); checkClosing(); await bootstrapAdmin(pool); }, { ...retry, logger });
+    checkClosing();
+    maintenance = await startMaintenance();
+    if (state.shuttingDown) await maintenance?.stop();
     checkClosing();
     state.ready = true;
     logger.log(`Sherubtse Lost & Found is ready: http://localhost:${server.address().port}`);

@@ -172,9 +172,37 @@ function itemForm(kind = 'found') {
     const signed = await request(`/api/items?id=${id}`, { cookie: other.cookie });
     assert.equal(signed.data.items[0].email, owner.email);
     assert.equal((await fetch(base + `/api/items/${id}/photo`)).status, 200);
-    assert.equal((await request(`/api/items/${id}`, { method: 'PATCH', cookie: other.cookie, json: { status: 'returned' } })).status, 404);
+    assert.equal((await request(`/api/items/${id}`, { method: 'PATCH', cookie: other.cookie, json: { status: 'returned', confirmed: true } })).status, 404);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: other.cookie })).status, 404);
-    assert.equal((await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned' } })).status, 200);
+    assert.equal((await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned' } })).status, 400);
+    assert.equal((await pool.query('SELECT returned_at FROM item_reports WHERE id=$1', [id])).rows[0].returned_at, null);
+    const returnResult = await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned', confirmed: true } });
+    assert.equal(returnResult.status, 200); assert.ok(returnResult.data.returnedAt);
+    assert.equal(new Date(returnResult.data.deleteAfter) - new Date(returnResult.data.returnedAt), 7*24*60*60*1000);
+    const repeatReturn = await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned', confirmed: true } });
+    assert.equal(repeatReturn.data.returnedAt, returnResult.data.returnedAt);
+    // Shadow only this fixture owner's rows with an updatable temporary view.
+    // Production cleanup runs unchanged, but cannot touch other students' data in this test.
+    const retentionClient = await pool.connect();
+    try {
+      await retentionClient.query('BEGIN');
+      await retentionClient.query("SELECT set_config('test.retention_owner',$1,true)", [String(owner.id)]);
+      await retentionClient.query("CREATE TEMP VIEW item_reports AS SELECT * FROM public.item_reports WHERE user_id=current_setting('test.retention_owner')::bigint");
+      const expired = await retentionClient.query(`INSERT INTO public.item_reports(user_id,kind,title,category,description,location,item_date,phone_public,photo_mime,photo_data,status,returned_at)
+        SELECT user_id,kind,title,category,description,location,item_date,phone_public,photo_mime,photo_data,'returned',NOW()-INTERVAL '168 hours' FROM public.item_reports WHERE id=$1 RETURNING id`, [id]);
+      const expiredId = expired.rows[0].id;
+      await retentionClient.query("INSERT INTO item_comments(item_id,user_id,body) VALUES($1,$2,'Temporary expired comment')", [expiredId,owner.id]);
+      assert.equal((await retentionClient.query('SELECT photo_data IS NOT NULL AS photo FROM item_reports WHERE id=$1', [expiredId])).rows[0].photo, true);
+      await retentionClient.query("UPDATE public.item_reports SET returned_at=NOW()-INTERVAL '200 hours' WHERE id=$1", [legacy.rows[0].id]);
+      const cleanup = await require('../models/itemModel').deleteExpiredReturned(retentionClient);
+      assert.equal(cleanup.rowCount, 1);
+      assert.equal((await retentionClient.query('SELECT id FROM item_reports WHERE id=$1', [expiredId])).rowCount, 0);
+      assert.equal((await retentionClient.query('SELECT id FROM item_comments WHERE item_id=$1', [expiredId])).rowCount, 0);
+      assert.equal((await retentionClient.query('SELECT id FROM item_reports WHERE id=$1', [legacy.rows[0].id])).rowCount, 1);
+      assert.equal((await retentionClient.query('SELECT id FROM item_reports WHERE id=$1', [id])).rowCount, 1);
+      assert.equal((await require('../models/itemModel').deleteExpiredReturned(retentionClient)).rowCount, 0);
+    } finally { await retentionClient.query('ROLLBACK'); retentionClient.release(); }
+    console.log('PASS: owner confirmation, persistent seven-day deadline, no countdown reset, expired post/image/comment deletion and protection of open or recent posts.');
     assert.equal((await request('/api/items', { cookie: owner.cookie })).data.items.some(item => item.id === id), false);
     assert.equal((await request('/api/items?mine=1', { cookie: owner.cookie })).data.items.some(item => item.id === id), true);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: owner.cookie })).status, 204);

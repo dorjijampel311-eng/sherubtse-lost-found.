@@ -73,3 +73,10 @@ test('pool cleanup still runs if closing the session store fails', async () => {
   await assert.rejects(startApplication({ ...f, port: 0, initializeDatabase: async () => { throw original; }, bootstrapAdmin: async () => {} }), error => error === original);
   assert.ok(f.events.includes('pool-closed')); assert.ok(f.errors.some(text => text.includes('Startup resource cleanup failed')));
 });
+
+test('maintenance starts after database setup and stops before the shared pool closes', async () => {
+  const f = fixtures();
+  const runtime = await startApplication({ ...f, port: 0, initializeDatabase: async () => f.events.push('schema-ready'), bootstrapAdmin: async () => {},
+    startMaintenance: async () => { assert.ok(f.events.includes('schema-ready')); return { stop: async () => f.events.push('maintenance-stopped') }; } });
+  await runtime.close(); assert.ok(f.events.indexOf('maintenance-stopped') < f.events.indexOf('pool-closed'));
+});
