@@ -1,8 +1,12 @@
 const router = require('express').Router();
 const controller = require('../controllers/adminController');
+const upload = require('../middleware/upload');
 const { requireAdmin } = require('../middleware/auth');
 router.use(requireAdmin);
 router.get('/overview', controller.overview);
 router.get('/listings', controller.listings);
+router.get('/listings/:id', controller.listing);
+router.put('/listings/:id', upload.single('photo'), controller.updateListing);
+router.delete('/listings/:id', controller.deleteListing);
 router.get('/feedback', controller.feedback);
 module.exports = router;

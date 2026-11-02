@@ -64,7 +64,7 @@ Sending occurs during the publish request, in batches of three. This is suitable
 
 ## Student feedback
 
-The About page accepts a 1-5 experience rating and 10-2,000 characters of feedback from signed-in students. Submissions are saved privately in `portal_feedback`, linked to the session account, with a limit of five per hour. They are not public testimonials, and no email or reply is promised. Authorized administrators can review private feedback in the read-only `/admin` dashboard. The table is created automatically at startup.
+The About page accepts a 1-5 experience rating and 10-2,000 characters of feedback from signed-in students. Submissions are saved privately in `portal_feedback`, linked to the session account, with a limit of five per hour. They are not public testimonials, and no email or reply is promised. Authorized administrators can review private feedback in the `/admin` dashboard. The table is created automatically at startup.
 
 ## Email verification and password recovery
 
@@ -109,7 +109,7 @@ Email links use `APP_BASE_URL` plus `/verify`, `/reset-password` or `/browse?id=
 
 All existing and newly registered accounts default to `role='user'`. No account is automatically promoted. Registration ignores supplied role fields, and profile updates reject role changes. The admin router checks the verified session and administrator role on the server for every request. Roles are refreshed from PostgreSQL, so removing a role takes effect on the next request.
 
-The administrator dashboard is read-only: account/listing/feedback totals, the latest 100 listings and the latest 100 private feedback submissions. It does not expose password hashes, verification codes, phone numbers or a user directory, and it does not delete or edit student content. Ordinary students retain control of their own profiles and posts.
+The administrator dashboard provides: account/listing/feedback totals, searchable, paginated listings and the latest 100 private feedback submissions. It does not expose password hashes, verification codes, phone numbers or a user directory, and server-validated editing/deletion of student listings. Ordinary students retain control of their own profiles and posts.
 
 To authorize an administrator, a trusted database maintainer can promote a specific existing, email-verified student account through PostgreSQL. Use a parameterized query in your database tool or replace the example address in this SQL with the intended account:
 
@@ -211,3 +211,9 @@ Startup adds the nullable `returned_at` column and a partial expiry index. It do
 A bounded batch of up to 200 overdue posts is deleted on server startup and every five minutes while the server runs. PostgreSQL cascades the deletion to item comments; image bytes are stored in the post row and are deleted with it. Cleanup uses row locks with SKIP LOCKED so concurrent app instances do not process the same rows, and it does not overlap its own runs. Failures are logged safely and retried on the next pass. Shutdown stops the job before closing the shared database pool.
 
 On Render Free the process can sleep. The deadline remains stored in PostgreSQL, and overdue posts are cleaned up on the next startup/wake. A sleeping service cannot physically delete at the exact deadline; exact wall-clock execution requires an external scheduled worker/database job. No new external service or environment variable is required for the built-in cleanup.
+
+## Administrator listing management
+
+Authorized administrators can search and paginate all lost/found listings, open an editor, and change title, description, category, location, date, report type (LOST/FOUND) and photo. Photos can be kept, replaced or removed; replacements use the existing JPEG/PNG/WebP signature checks and 30 MB limit. Dates use ISO values on the API and DD/MM/YYYY in the editor. Editing preserves the owner, phone-sharing setting, open/returned lifecycle state and scheduled deletion timestamp. Editing a LOST post into FOUND does not send a new-item email.
+
+The admin router requires a verified administrator session before reads, uploads or mutations. `PUT /api/admin/listings/:id` accepts multipart fields; it cannot transfer ownership or override lifecycle state. `DELETE /api/admin/listings/:id` requires JSON `{ "confirmed": true }`, and the dashboard asks for confirmation first. Deletion uses one database operation: related comments cascade and the stored photo bytes disappear with the listing. Photo responses revalidate so edited/deleted images are not served from a stale five-minute cache. Role revocation takes effect on the next request.

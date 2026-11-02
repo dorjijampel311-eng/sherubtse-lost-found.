@@ -1,7 +1,7 @@
 const itemModel = require('../models/itemModel');
 const { currentUser } = require('../middleware/auth');
 const { clean, validDate, photoMatches } = require('../lib/helpers');
-const categories = new Set(['Electronics', 'ID cards & wallets', 'Bags', 'Books & notes', 'Keys', 'Clothing', 'Sports equipment', 'Other']);
+const { categories } = require('../lib/itemRules');
 
 const { notifyFoundItem } = require('../email');
 exports.listItems = async (req, res, next) => {
@@ -18,7 +18,7 @@ exports.itemPhoto = async (req, res, next) => {
     if (!/^\d+$/.test(req.params.id)) return res.status(404).end();
     const result = await itemModel.photo([req.params.id]);
     if (!result.rows[0]) return res.status(404).end();
-    res.set({ 'Content-Type': result.rows[0].photo_mime, 'Content-Length': result.rows[0].photo_data.length, 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+    res.set({ 'Content-Type': result.rows[0].photo_mime, 'Content-Length': result.rows[0].photo_data.length, 'Cache-Control': 'public, max-age=0, must-revalidate', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
     res.send(result.rows[0].photo_data);
   } catch (error) { next(error); }
 };

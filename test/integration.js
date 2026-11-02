@@ -131,6 +131,60 @@ function itemForm(kind = 'found') {
     const created = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: valid });
     assert.equal(created.status, 201, JSON.stringify(created.data));
     const id = created.data.id;
+    // Test administrator moderation on another student's disposable listing.
+    const source = await pool.query(`INSERT INTO item_reports(user_id,kind,title,category,description,location,item_date,phone_public,photo_mime,photo_data,status,returned_at)
+      SELECT $1,'lost','Admin test fixture','Other','Original description','Original location','2026-11-02',FALSE,photo_mime,photo_data,'returned',NOW() FROM item_reports WHERE id=$2 RETURNING id,returned_at`, [other.id,id]);
+    const adminId = source.rows[0].id, originalReturn = source.rows[0].returned_at.toISOString();
+    await pool.query("INSERT INTO item_comments(item_id,user_id,body) VALUES($1,$2,'Admin cleanup test')", [adminId,other.id]);
+    const adminPath = `/api/admin/listings/${adminId}`;
+    function editForm(change = {}) {
+      const form = new FormData();
+      for (const [key,value] of Object.entries({ title: 'Updated title', description: 'Updated description', category: 'Books & notes', location: 'Updated location', itemDate: '2026-11-01', kind: 'found', ...change })) form.set(key,value);
+      return form;
+    }
+    assert.equal((await request(adminPath)).status, 401);
+    assert.equal((await request(adminPath, { method: 'PUT', body: editForm() })).status, 401);
+    assert.equal((await request(adminPath, { method: 'DELETE', json: { confirmed: true } })).status, 401);
+    assert.equal((await request(adminPath, { cookie: owner.cookie })).status, 403);
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: editForm() })).status, 403);
+    assert.equal((await request(adminPath, { method: 'DELETE', cookie: owner.cookie, json: { confirmed: true } })).status, 403);
+    await pool.query("UPDATE portal_users SET role='admin' WHERE id=$1", [owner.id]);
+    assert.equal((await request(adminPath, { cookie: owner.cookie })).data.item.itemDate, '2026-11-02');
+    for (const change of [{ title: '' }, { category: 'Invalid' }, { kind: 'returned' }, { itemDate: '2026-02-31' }, { userId: owner.id }]) {
+      assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: editForm(change) })).status, 400);
+    }
+    const badPhoto = editForm(); badPhoto.set('photo',new Blob(['invalid'],{ type:'image/png' }),'bad.png');
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: badPhoto })).status, 400);
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: editForm() })).status, 200);
+    let updated = (await request(adminPath, { cookie: owner.cookie })).data.item;
+    for (const [key,value] of Object.entries({ title:'Updated title',description:'Updated description',category:'Books & notes',location:'Updated location',kind:'found',itemDate:'2026-11-01',ownerId:other.id,status:'returned',returnedAt:originalReturn })) assert.equal(updated[key],value);
+    assert.equal(updated.hasPhoto,true);
+    const replacementPhoto = Buffer.concat([photo,Buffer.from([0])]);
+    const replacement = editForm(); replacement.set('photo',new Blob([replacementPhoto],{ type:'image/png' }),'replacement.png');
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: replacement })).status, 200);
+    assert.ok(Buffer.from(await (await fetch(base+`/api/items/${adminId}/photo`)).arrayBuffer()).equals(replacementPhoto));
+    const conflict = editForm({ removePhoto:'on' }); conflict.set('photo',new Blob([photo],{ type:'image/png' }),'conflict.png');
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: conflict })).status, 400);
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: editForm({ removePhoto:'on' }) })).status, 200);
+    assert.equal((await fetch(base+`/api/items/${adminId}/photo`)).status,404);
+    assert.equal((await request(adminPath, { method: 'PUT', cookie: owner.cookie, body: replacement })).status,200);
+    assert.equal((await request('/api/admin/listings?search=Updated%20title', { cookie: owner.cookie })).data.items.some(row=>row.id===adminId),true);
+    const insertOlder = await pool.query(`INSERT INTO item_reports(user_id,kind,title,category,description,location,item_date,phone_public)
+      SELECT $1,'lost','Temporary admin page','Other','Temporary page data','Test location','2026-11-02',TRUE FROM generate_series(1,101) RETURNING id`, [other.id]);
+    const firstAdminPage = (await request('/api/admin/listings?search=Temporary%20admin%20page', { cookie: owner.cookie })).data;
+    assert.equal(firstAdminPage.items.length,100); assert.equal(firstAdminPage.hasMore,true);
+    const nextAdminPage = (await request('/api/admin/listings?search=Temporary%20admin%20page&before='+firstAdminPage.nextCursor, { cookie: owner.cookie })).data;
+    assert.equal(nextAdminPage.items.length,1); assert.equal(nextAdminPage.hasMore,false);
+    await pool.query('DELETE FROM item_reports WHERE id=ANY($1::bigint[])',[insertOlder.rows.map(row=>row.id)]);
+    assert.equal((await request(adminPath, { method:'DELETE', cookie:owner.cookie, json:{} })).status,400);
+    assert.equal((await request(adminPath, { method:'DELETE', cookie:owner.cookie, json:{confirmed:true} })).status,200);
+    assert.equal((await pool.query('SELECT id FROM item_comments WHERE item_id=$1',[adminId])).rowCount,0);
+    assert.equal((await fetch(base+`/api/items/${adminId}/photo`)).status,404);
+    await pool.query("UPDATE portal_users SET role='user' WHERE id=$1",[owner.id]);
+    assert.equal((await request(`/api/admin/listings/${id}`,{method:'PUT',cookie:owner.cookie,body:editForm()})).status,403);
+    assert.equal(foundEvents.length,1,'Editing a listing must not trigger a FOUND notification.');
+    console.log('PASS: admin-only cross-owner editing/deletion, all fields, photo replacement/removal, unchanged owner/return deadline, pagination, confirmation and cascading cleanup.');
+
     assert.equal((await request(`/api/items/${legacy.rows[0].id}/comments`, { method: 'POST', cookie: other.cookie, json: { body: 'Comment on a lost item.' } })).status, 201);
     const commentPath = `/api/items/${id}/comments`;
     assert.equal((await request(commentPath, { method: 'POST', json: { body: 'Test comment' } })).status, 401);

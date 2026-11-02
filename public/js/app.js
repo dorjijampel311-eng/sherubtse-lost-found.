@@ -316,19 +316,89 @@ function initCodeForms() {
   });
 }
 
+function adminListingCard(item) {
+  return `<article class="step-card"><span class="eyebrow eyebrow-dark">${escapeHtml(item.kind)} &middot; ${escapeHtml(item.status)} &middot; #${escapeHtml(item.id)}</span><h3><a href="/browse?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h3>${item.hasPhoto ? `<img class="admin-listing-photo" src="/api/items/${encodeURIComponent(item.id)}/photo" alt="Photo of ${escapeHtml(item.title)}" loading="lazy">` : ''}<p>${escapeHtml(item.description)}</p><small>${escapeHtml(item.name)} &middot; ${escapeHtml(item.category)} &middot; ${escapeHtml(item.location)} &middot; ${escapeHtml(formattedDate(item.itemDate))}</small><div class="item-actions"><button type="button" class="button button-small button-navy" data-admin-edit="${escapeHtml(item.id)}">Edit listing</button><button type="button" class="button button-small button-danger" data-admin-delete="${escapeHtml(item.id)}">Delete listing</button></div></article>`;
+}
 async function initAdmin() {
   const overview = document.querySelector('#admin-overview');
   if (!overview) return;
   const message = document.querySelector('#admin-message');
-  try {
-    const [counts, reports, comments] = await Promise.all([api('/api/admin/overview'), api('/api/admin/listings'), api('/api/admin/feedback')]);
+  const listings = document.querySelector('#admin-listings');
+  const more = document.querySelector('#admin-more');
+  const search = document.querySelector('#admin-listing-search');
+  const dialog = document.querySelector('#admin-edit-dialog');
+  const form = document.querySelector('#admin-edit-form');
+  const editorMessage = document.querySelector('#admin-edit-message');
+  const close = document.querySelector('#admin-edit-close');
+  let cursor = null, sequence = 0, editingId = null, saving = false;
+  const feedback = document.querySelector('#admin-feedback');
+  const notify = (text, success = false) => { message.textContent = text; message.classList.toggle('success', success); };
+  const loadOverview = async () => {
+    const counts = await api('/api/admin/overview');
     overview.innerHTML = [['students', 'Student accounts'], ['listings', 'Total listings'], ['feedback', 'Feedback received']].map(([key, title]) => `<div><strong>${escapeHtml(counts[key])}</strong><span>${title}</span></div>`).join('');
-    document.querySelector('#admin-feedback').innerHTML = comments.feedback.length ? comments.feedback.map(item => `<article class="step-card"><span class="eyebrow eyebrow-dark">Rating ${escapeHtml(item.rating)} / 5</span><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.message)}</p><small>${escapeHtml(item.course)} &middot; ${escapeHtml(formattedDate(item.createdAt))}</small></article>`).join('') : '<p class="empty-state">No feedback has been submitted yet.</p>';
-    document.querySelector('#admin-listings').innerHTML = reports.items.length ? reports.items.map(item => `<article class="step-card"><span class="eyebrow eyebrow-dark">${escapeHtml(item.kind)} &middot; ${escapeHtml(item.status)}</span><h3><a href="/browse?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h3><p>${escapeHtml(item.description)}</p><small>${escapeHtml(item.name)} &middot; ${escapeHtml(item.category)} &middot; ${escapeHtml(item.location)}</small></article>`).join('') : '<p class="empty-state">No listings have been posted yet.</p>';
-  } catch (error) {
-    overview.textContent = ''; message.textContent = error.message;
-    document.querySelectorAll('#admin-feedback, #admin-listings').forEach(target => { target.textContent = 'Unable to load. Refresh to try again.'; });
-  }
+  };
+  const loadListings = async (append = false) => {
+    const request = ++sequence; more.disabled = true;
+    try {
+      const params = new URLSearchParams({ search: search.value.trim() });
+      if (append && cursor) params.set('before', cursor);
+      const result = await api('/api/admin/listings?' + params);
+      if (request !== sequence) return;
+      const html = result.items.map(adminListingCard).join('');
+      if (append) listings.insertAdjacentHTML('beforeend', html);
+      else listings.innerHTML = html || '<p class="empty-state">No matching listings.</p>';
+      cursor = result.nextCursor; more.hidden = !result.hasMore; return true;
+    } catch (error) { if (request === sequence) { notify(error.message); if (!append) listings.innerHTML = '<p class="empty-state">Unable to load listings. Search again to retry.</p>'; } return false; }
+    finally { if (request === sequence) more.disabled = false; }
+  };
+  document.querySelector('#admin-search-form').addEventListener('submit', event => { event.preventDefault(); void loadListings(); });
+  more.addEventListener('click', () => { void loadListings(true); });
+  close.addEventListener('click', () => { if (!saving) dialog.close(); });
+  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  listings.onclick = async event => {
+    const edit = event.target.closest('[data-admin-edit]');
+    const remove = event.target.closest('[data-admin-delete]');
+    const button = edit || remove;
+    if (!button || button.disabled) return;
+    const id = button.dataset[edit ? 'adminEdit' : 'adminDelete'];
+    if (remove && !confirm('Permanently delete this listing, all of its comments and its uploaded photo?')) return;
+    button.disabled = true;
+    try {
+      if (remove) {
+        await api(`/api/admin/listings/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmed: true }) });
+        const [refreshed] = await Promise.all([loadListings(), loadOverview()]); notify('Listing, comments and photo deleted.' + (refreshed ? '' : ' Refresh to reload the list.'), true);
+      } else {
+        notify('Loading listing...');
+        const { item } = await api(`/api/admin/listings/${encodeURIComponent(id)}`);
+        form.reset(); editingId = item.id;
+        for (const name of ['title','description','category','location','kind']) form.elements[name].value = item[name];
+        form.elements.itemDate.value = String(item.itemDate).slice(0,10);
+        form.elements.itemDate.dispatchEvent(new Event('change', { bubbles: true }));
+        const photo = document.querySelector('#admin-current-photo'); photo.hidden = !item.hasPhoto;
+        if (item.hasPhoto) photo.src = `/api/items/${encodeURIComponent(item.id)}/photo?v=${Date.now()}`; else photo.removeAttribute('src');
+        editorMessage.textContent = ''; notify(''); dialog.showModal();
+      }
+    } catch (error) { notify(error.message); }
+    finally { button.disabled = false; }
+  };
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); if (saving || !editingId) return;
+    const file = form.elements.photo.files[0];
+    if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>30*1024*1024)) { editorMessage.textContent = 'Choose a JPG, PNG or WebP photo, up to 30 MB.'; return; }
+    if (file && form.elements.removePhoto.checked) { editorMessage.textContent = 'Choose either a replacement photo or remove photo, not both.'; return; }
+    const button = form.querySelector('[type="submit"]'); saving = true; button.disabled = true; close.disabled = true; button.textContent = 'Saving...'; editorMessage.textContent = '';
+    try {
+      await api(`/api/admin/listings/${encodeURIComponent(editingId)}`, { method: 'PUT', body: new FormData(form) });
+      dialog.close(); const [refreshed] = await Promise.all([loadListings(), loadOverview()]); notify('Listing updated.' + (refreshed ? '' : ' Refresh to reload the list.'), true);
+    } catch (error) { editorMessage.textContent = error.message; }
+    finally { saving = false; button.disabled = false; close.disabled = false; button.textContent = 'Save changes'; }
+  });
+  try {
+    await Promise.all([loadOverview(), loadListings(), (async () => {
+      const comments = await api('/api/admin/feedback');
+      feedback.innerHTML = comments.feedback.length ? comments.feedback.map(item => `<article class="step-card"><span class="eyebrow eyebrow-dark">Rating ${escapeHtml(item.rating)} / 5</span><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.message)}</p><small>${escapeHtml(item.course)} &middot; ${escapeHtml(formattedDate(item.createdAt))}</small></article>`).join('') : '<p class="empty-state">No feedback has been submitted yet.</p>';
+    })()]);
+  } catch (error) { overview.textContent = ''; notify(error.message); feedback.textContent = 'Unable to load. Refresh to try again.'; }
 }
 
 function bindListingActions(container, refresh) {
