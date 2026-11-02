@@ -11,7 +11,7 @@ function authEmail(req) {
   return /^\d{8}\.sherubtse@rub\.edu\.bt$/.test(email) ? email : null;
 }
 function deliveryMessage(status) {
-  if (status === 'unconfigured') return 'Email settings are missing or invalid. Ask the project maintainer to configure the email web app, then resend your code.';
+  if (status === 'unconfigured') return 'Email settings are missing or invalid. Set MAIL_WEB_APP_URL, MAIL_WEB_APP_SECRET and APP_BASE_URL in the project .env or hosting environment, restart the server, then resend your code.';
   if (status === 'failed') return 'The email could not be sent. Try requesting a new code later or contact the project maintainer.';
   if (status === 'cooldown') return 'Wait at least 60 seconds before requesting another code.';
   return 'If this account needs verification, request a new code and check your inbox.';
@@ -60,7 +60,7 @@ exports.resendVerification = async (req, res, next) => {
     if (!email) return res.status(400).json({ error: 'Enter your eight-digit-number.sherubtse@rub.edu.bt email.' });
     const result = await codes.issue(email, 'verify');
     const status = result.status === 'unconfigured' || result.status === 'failed' ? 503 : result.status === 'cooldown' ? 429 : 200;
-    res.status(status).json({ [status >= 400 ? 'error' : 'message']: result.status === 'accepted' ? 'The email server accepted your verification email. Use the latest code within 10 minutes.' : deliveryMessage(result.status) });
+    res.status(status).json({ status: result.status, [status >= 400 ? 'error' : 'message']: result.status === 'accepted' ? 'The email server accepted your verification email. Use the latest code within 10 minutes.' : deliveryMessage(result.status) });
   } catch (error) { next(error); }
 };
 
@@ -76,7 +76,7 @@ exports.verifyEmail = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const email = authEmail(req);
-    if (!emailConfigured()) return res.status(503).json({ error: 'Email settings are missing or invalid. Password reset emails are unavailable until the project maintainer configures the email web app.' });
+    if (!emailConfigured()) return res.status(503).json({ status: 'unconfigured', error: 'Email settings are missing or invalid. Password reset emails are unavailable until the project maintainer configures the email web app.' });
     // The response never varies with account existence, opt-in, cooldown or account-specific delivery results.
     if (email) await codes.issue(email, 'reset');
     res.json({ message: 'If an eligible account exists, a reset code has been requested. Check your inbox and spam folder. Delivery cannot be confirmed here for privacy. If no code arrives, sending may have failed; wait 60 seconds and try again or contact the project maintainer.' });

@@ -1,16 +1,22 @@
+require('../config/environment');
 const userModel = require('../models/userModel');
 const { validStudent } = require('../validation');
 const { authEmail, foundItemEmail } = require('./emailTemplates');
-function emailConfigured() {
-  const { MAIL_WEB_APP_URL, MAIL_WEB_APP_SECRET, APP_BASE_URL } = process.env;
-  if (![MAIL_WEB_APP_URL, MAIL_WEB_APP_SECRET, APP_BASE_URL].every(value => typeof value === 'string' && value.trim())) return false;
-  try {
-    const endpoint = new URL(MAIL_WEB_APP_URL);
-    const base = new URL(APP_BASE_URL);
-    return endpoint.protocol === 'https:' && ['http:', 'https:'].includes(base.protocol)
-      && !endpoint.username && !endpoint.password && !base.username && !base.password;
-  } catch { return false; }
+function emailConfiguration() {
+  const keys = ['MAIL_WEB_APP_URL', 'MAIL_WEB_APP_SECRET', 'APP_BASE_URL'];
+  const missing = keys.filter(key => typeof process.env[key] !== 'string' || !process.env[key].trim());
+  const invalid = [];
+  for (const key of ['MAIL_WEB_APP_URL', 'APP_BASE_URL']) {
+    if (missing.includes(key)) continue;
+    try {
+      const url = new URL(process.env[key]);
+      const protocols = key === 'MAIL_WEB_APP_URL' ? ['https:'] : ['http:', 'https:'];
+      if (!protocols.includes(url.protocol) || !url.hostname || url.username || url.password) invalid.push(key);
+    } catch { invalid.push(key); }
+  }
+  return { configured: missing.length === 0 && invalid.length === 0, missing, invalid };
 }
+function emailConfigured() { return emailConfiguration().configured; }
 async function postEmail({ to, subject, text, html = '' }) {
   if (!emailConfigured()) return false;
   try {
@@ -24,7 +30,7 @@ async function postEmail({ to, subject, text, html = '' }) {
     });
     if (!response.ok) return false;
     const result = await response.json();
-    return result?.ok !== false;
+    return result?.ok === true;
   } catch { return false; }
 }
 async function notifyItem(item, kind) {
@@ -72,4 +78,4 @@ async function sendAuthCode({ email, code, purpose }) {
 }
 const notifyLostItem = item => notifyItem(item, 'lost');
 const notifyFoundItem = item => notifyItem(item, 'found');
-module.exports = { notifyLostItem, notifyFoundItem, sendAuthCode, emailConfigured };
+module.exports = { notifyLostItem, notifyFoundItem, sendAuthCode, emailConfigured, emailConfiguration };

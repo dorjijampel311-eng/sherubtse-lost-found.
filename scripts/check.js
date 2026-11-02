@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const directories = ['controllers', 'routes', 'models', 'middleware', 'lib', 'services', 'scripts', 'test', 'public/js'];
+const directories = ['config', 'controllers', 'routes', 'models', 'middleware', 'lib', 'services', 'scripts', 'test', 'public/js'];
 const files = ['server.js', 'app.js', 'db.js', 'email.js', 'auth-codes.js', 'validation.js'];
 function collect(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {

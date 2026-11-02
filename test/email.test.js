@@ -19,6 +19,9 @@ global.fetch = async (url, options) => {
   if (mode === 'timeout') throw new DOMException('Timed out', 'TimeoutError');
   return { ok: mode !== 'http-error', json: async () => {
     if (mode === 'invalid-json') throw new SyntaxError('Invalid JSON');
+    if (mode === 'empty-result') return {};
+    if (mode === 'null-result') return null;
+    if (mode === 'string-success') return { ok: 'true' };
     return { ok: mode !== 'rejected' };
   } };
 };
@@ -131,7 +134,7 @@ test('HTTP errors, ok:false, invalid JSON, network errors and timeout fail witho
   let timeoutMs;
   AbortSignal.timeout = ms => { timeoutMs = ms; return new AbortController().signal; };
   try {
-    for (mode of ['http-error', 'rejected', 'invalid-json', 'network', 'timeout']) {
+    for (mode of ['http-error', 'rejected', 'invalid-json', 'empty-result', 'null-result', 'string-success', 'network', 'timeout']) {
       assert.deepEqual(await sendAuthCode({ email: '07240068.sherubtse@rub.edu.bt', code: '01234567', purpose: 'verify' }), { status: 'failed' });
       assert.equal(timeoutMs, 15000);
     }
@@ -148,4 +151,21 @@ test('partial found-item sending failure preserves aggregate counts and per-reci
     const result = await notifyFoundItem({ ...item, posterId: '1', description: 'Found bottle.' });
     assert.equal(result.status, 'failed'); assert.match(result.message, /failed for 1 recipient/); assert.match(result.message, /1 accepted/);
   } finally { global.fetch = mock; }
+});
+
+test('safe configuration diagnostics expose variable names only and never require SMTP', () => {
+  const { emailConfiguration } = require('../email');
+  const saved = { MAIL_WEB_APP_URL: process.env.MAIL_WEB_APP_URL, MAIL_WEB_APP_SECRET: process.env.MAIL_WEB_APP_SECRET, APP_BASE_URL: process.env.APP_BASE_URL };
+  try {
+    delete process.env.MAIL_WEB_APP_SECRET;
+    let result = emailConfiguration();
+    assert.equal(result.configured, false); assert.deepEqual(result.missing, ['MAIL_WEB_APP_SECRET']);
+    process.env.MAIL_WEB_APP_SECRET = 'test-secret-never-return';
+    process.env.MAIL_WEB_APP_URL = 'not-a-valid-url';
+    result = emailConfiguration(); assert.deepEqual(result.invalid, ['MAIL_WEB_APP_URL']);
+    assert.ok(!JSON.stringify(result).includes(process.env.MAIL_WEB_APP_SECRET));
+    assert.ok(!JSON.stringify(result).includes('not-a-valid-url'));
+    process.env.MAIL_WEB_APP_URL = 'https://script.google.com/macros/s/test/exec';
+    assert.equal(emailConfiguration().configured, true);
+  } finally { Object.assign(process.env, saved); }
 });

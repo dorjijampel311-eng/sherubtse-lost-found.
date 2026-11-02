@@ -1,11 +1,15 @@
-require('dotenv').config();
+require('./config/environment');
 const app = require('./app');
 const { pool, initializeDatabase } = require('./db');
 const { bootstrapAdmin } = require('./services/adminBootstrap');
+const { emailConfiguration } = require('./email');
 const PORT = Number(process.env.PORT || 3000);
 
 async function start() {
   if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)) throw new Error('Set SESSION_SECRET to a random value with at least 32 characters.');
+  const mail = emailConfiguration();
+  if (mail.configured) console.log('Email web app settings loaded. Delivery has not been tested.');
+  else console.warn(`Email web app settings unavailable. Missing: ${mail.missing.join(', ') || 'none'}. Invalid: ${mail.invalid.join(', ') || 'none'}. Set these server-side variables and restart.`);
   await initializeDatabase();
   const admin = await bootstrapAdmin(pool);
   if (admin.status === 'pending') console.warn(admin.message);

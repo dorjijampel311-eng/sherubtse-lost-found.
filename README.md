@@ -155,3 +155,11 @@ Each message is a separate JSON POST with exactly `{ secret, to, subject, text, 
 Templates, verification/reset expiry, single-use rules, notification preferences and recipient filtering remain unchanged. The JSON contract has no attachment field: existing template CID references are converted to the public college logo and item-photo URLs. Use a reachable HTTPS `APP_BASE_URL` in production; localhost images cannot load in recipients' email clients. Found-item and verification HTML/plain-text remain separate. Earlier SMTP/CID-attachment instructions describe the former transport and are superseded by this section.
 
 Tests mock `fetch` and never invoke the web app or send real emails. Deployment and live sending require your actual web app URL and shared secret.
+
+## Verification configuration troubleshooting
+
+The server, Express app and standalone email service load the project-root `.env` through `config/environment.js`, before importing email/database dependencies. Existing host environment settings take precedence, which supports Render. Changing `.env` requires a restart. Keep one entry per key, particularly `APP_BASE_URL`. Startup prints only safe missing/invalid variable names, never values.
+
+`MAIL_WEB_APP_URL` must be a valid HTTPS deployment URL, `MAIL_WEB_APP_SECRET` must be nonblank, and `APP_BASE_URL` must be a valid HTTP/HTTPS website URL. SMTP variables are not required. The sender accepts only HTTP success with explicit JSON `ok:true`; malformed JSON, missing success flags, `ok:false`, network errors and timeouts fail safely. Missing configuration and send failures remain distinct; failed sends do not verify accounts or leave usable codes.
+
+A matching deployable receiver and instructions are in [apps-script/Code.gs](apps-script/Code.gs) and [apps-script/README.md](apps-script/README.md). Deploy it under your Google account, set the matching secret in Script Properties, and put the deployment's `/exec` URL in local `.env` and Render Environment. Automated tests mock both fetch and Apps Script's MailApp. The local checks cannot certify that your remote deployment has the correct secret, access or Google authorization.
