@@ -5,6 +5,7 @@ const { validStudent, validProfile, validPassword } = require('../validation');
 const bcrypt = require('bcryptjs');
 const { emailConfigured } = require('../email');
 const codes = require('../services/authService');
+const { activateConfiguredAdmin } = require('../services/adminBootstrap');
 function authEmail(req) {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   return /^\d{8}\.sherubtse@rub\.edu\.bt$/.test(email) ? email : null;
@@ -67,6 +68,7 @@ exports.verifyEmail = async (req, res, next) => {
   try {
     const email = authEmail(req);
     if (!email || !(await codes.consume(email, 'verify', req.body?.code))) return res.status(400).json({ error: 'The code is invalid, expired, already used, or has too many attempts. Request a new code.' });
+    await activateConfiguredAdmin(email);
     res.json({ message: 'Email verified. You can now sign in.' });
   } catch (error) { next(error); }
 };
