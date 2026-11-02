@@ -3,6 +3,7 @@ const itemColumns = `i.id, i.kind, i.title, i.category, i.description, i.locatio
   i.item_date AS "itemDate", i.status, i.phone_public AS "phonePublic",
   (i.photo_data IS NOT NULL) AS "hasPhoto", i.created_at AS "createdAt",
   u.id AS "ownerId", u.name, u.course,
+  (SELECT COUNT(*)::int FROM item_comments c WHERE c.item_id=i.id) AS "commentCount",
   CASE WHEN $1::bigint IS NOT NULL THEN u.email ELSE NULL END AS email,
   CASE WHEN i.phone_public OR i.user_id = $1 THEN u.phone ELSE NULL END AS phone`;
 

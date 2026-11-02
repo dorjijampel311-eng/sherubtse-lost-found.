@@ -52,7 +52,7 @@ function card(item) {
   const tools = manageable && item.status !== 'returned'
     ? `<div class="item-actions"><button class="button button-small button-navy" data-return="${escapeHtml(item.id)}">Mark returned</button><button class="button button-small button-danger" data-delete="${escapeHtml(item.id)}">Delete post</button></div>`
     : manageable ? `<div class="item-actions"><button class="button button-small button-danger" data-delete="${escapeHtml(item.id)}">Delete post</button></div>` : '';
-  return `<article class="item-card" id="item-${escapeHtml(item.id)}">${photo}<div class="item-card-body"><div class="item-topline"><span class="status-badge ${statusClass}">${badge}</span><span class="category-badge">${escapeHtml(item.category)}</span></div><h3>${escapeHtml(item.title)}</h3><p class="item-description">${escapeHtml(item.description || 'No additional description was provided.')}</p><div class="item-meta"><span><b>Location</b> ${escapeHtml(item.location)}</span><span><b>Date</b> ${escapeHtml(formattedDate(item.itemDate))}</span><span><b>Posted by</b> ${escapeHtml(item.name)} · ${escapeHtml(item.course)}</span></div>${item.email ? `<a class="item-contact" href="mailto:${escapeHtml(item.email)}">Email poster</a>` : `<span class="muted">Sign in to see the poster&#39;s college email.</span>`}${phone}${tools}</div></article>`;
+  return `<article class="item-card" id="item-${escapeHtml(item.id)}">${photo}<div class="item-card-body"><div class="item-topline"><span class="status-badge ${statusClass}">${badge}</span><span class="category-badge">${escapeHtml(item.category)}</span></div><h3>${escapeHtml(item.title)}</h3><p class="item-description">${escapeHtml(item.description || 'No additional description was provided.')}</p><div class="item-meta"><span><b>Location</b> ${escapeHtml(item.location)}</span><span><b>Date</b> ${escapeHtml(formattedDate(item.itemDate))}</span><span><b>Posted by</b> ${escapeHtml(item.name)} · ${escapeHtml(item.course)}</span></div>${item.email ? `<a class="item-contact" href="mailto:${escapeHtml(item.email)}">Email poster</a>` : `<span class="muted">Sign in to see the poster&#39;s college email.</span>`}${phone}${tools}${commentSection(item)}</div></article>`;
 }
 
 async function fetchItems(mine = false) {
@@ -197,6 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initDateFields();
   initMobileMenu();
   await loadAccount();
+  initComments();
   bindAuthForms();
   initCodeForms();
   bindItemForm();
@@ -408,5 +409,83 @@ function initDateFields() {
       }
     });
     picker.form?.addEventListener('reset', () => queueMicrotask(fromPicker));
+  });
+}
+
+function commentSection(item) {
+  return `<details class="item-comments" data-comments-item="${escapeHtml(item.id)}"><summary>Comments (<span data-comment-count>${escapeHtml(item.commentCount || 0)}</span>)</summary><div data-comments-body><p class="muted">Loading comments...</p></div></details>`;
+}
+function commentRows(comments) {
+  return comments.map(comment => `<article class="comment-row"><div class="comment-topline"><button type="button" class="comment-author" aria-haspopup="dialog" data-commenter="${escapeHtml(comment.userId)}">${escapeHtml(comment.name)}</button><time datetime="${escapeHtml(comment.createdAt)}">${escapeHtml(new Date(comment.createdAt).toLocaleString())}</time></div><p>${escapeHtml(comment.body)}</p></article>`).join('');
+}
+async function loadComments(details, notice = '') {
+  const target = details.querySelector('[data-comments-body]');
+  target.setAttribute('aria-busy','true');
+  try {
+    const result = await api(`/api/items/${encodeURIComponent(details.dataset.commentsItem)}/comments`);
+    if (!details.isConnected) return;
+    details.querySelector('[data-comment-count]').textContent = String(result.total);
+    target.innerHTML = `<div data-comment-list>${result.comments.length ? commentRows(result.comments) : '<p class="muted" data-comments-empty>No comments yet. Start the conversation.</p>'}</div>${result.hasMore ? `<button type="button" class="comment-older" data-comments-before="${escapeHtml(result.nextCursor)}">Load earlier comments</button>` : ''}${state.user ? `<form class="comment-form"><label>Add a comment<textarea name="body" rows="2" maxlength="1000" required placeholder="Share an update or ask about this item"></textarea></label><p class="comment-privacy">Comments are public. Signed-in students can tap your name to view your phone, course and academic year.</p><button type="submit" class="button button-small button-navy">Post comment</button><p class="form-message${notice ? ' success' : ''}" data-comment-message role="status">${escapeHtml(notice)}</p></form>` : '<p class="comment-privacy"><a href="/login">Sign in</a> to leave a comment or view a commenter?s contact details.</p>'}`;
+    details.dataset.commentsLoaded = 'true';
+  } catch (error) { target.innerHTML = `<p class="form-message" role="alert">${escapeHtml(error.message)}</p><button type="button" class="button button-small button-navy" data-comments-retry>Retry</button>`; }
+  finally { target.removeAttribute('aria-busy'); }
+}
+function initComments() {
+  const dialog = document.createElement('dialog'); dialog.className = 'commenter-dialog';
+  dialog.setAttribute('aria-labelledby','commenter-heading');
+  dialog.innerHTML = '<button type="button" class="commenter-close" aria-label="Close student profile">&times;</button><h2 id="commenter-heading">Student profile</h2><div data-commenter-content aria-live="polite"></div>';
+  document.body.append(dialog);
+  let profileRequest = 0;
+  dialog.addEventListener('close', () => { profileRequest++; });
+  dialog.querySelector('.commenter-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  document.addEventListener('toggle', event => {
+    const details = event.target;
+    if (details.matches?.('[data-comments-item]') && details.open && details.dataset.commentsLoaded !== 'true') loadComments(details);
+  }, true);
+  document.addEventListener('submit', async event => {
+    const form = event.target;
+    if (!form.matches('.comment-form')) return;
+    event.preventDefault();
+    const details = form.closest('[data-comments-item]');
+    const button = form.querySelector('[type="submit"]'); const message = form.querySelector('[data-comment-message]');
+    const body = form.elements.body.value.trim();
+    if (!body || body.length>1000) { message.textContent = 'Write between 1 and 1,000 characters.'; return; }
+    if (button.disabled) return;
+    button.disabled = true; button.textContent = 'Posting...'; message.textContent = '';
+    try {
+      await api(`/api/items/${encodeURIComponent(details.dataset.commentsItem)}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) });
+      const count = details.querySelector('[data-comment-count]'); count.textContent = String(Number(count.textContent)+1);
+      await loadComments(details, 'Comment posted.');
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; button.textContent = 'Post comment'; }
+  });
+  document.addEventListener('click', async event => {
+    const retry = event.target.closest('[data-comments-retry]');
+    if (retry) { await loadComments(retry.closest('[data-comments-item]')); return; }
+    const older = event.target.closest('[data-comments-before]');
+    if (older && !older.disabled) {
+      const details = older.closest('[data-comments-item]'); older.disabled = true;
+      try {
+        const result = await api(`/api/items/${encodeURIComponent(details.dataset.commentsItem)}/comments?before=${encodeURIComponent(older.dataset.commentsBefore)}`);
+        details.querySelector('[data-comment-list]').insertAdjacentHTML('afterbegin', commentRows(result.comments));
+        if (result.hasMore) older.dataset.commentsBefore = result.nextCursor; else older.remove();
+      } catch (error) { alert(error.message); }
+      finally { older.disabled = false; }
+      return;
+    }
+    const author = event.target.closest('[data-commenter]');
+    if (!author) return;
+    const requestId = ++profileRequest;
+    const content = dialog.querySelector('[data-commenter-content]');
+    content.innerHTML = '<p class="muted">Loading profile...</p>'; dialog.showModal();
+    if (!state.user) { content.innerHTML = '<p>Please <a href="/login">sign in</a> to view this student?s contact details.</p>'; return; }
+    try {
+      const details = author.closest('[data-comments-item]');
+      const result = await api(`/api/items/${encodeURIComponent(details.dataset.commentsItem)}/commenters/${encodeURIComponent(author.dataset.commenter)}`);
+      if (requestId !== profileRequest || !dialog.open) return;
+      const user = result.user;
+      content.innerHTML = `<h3>${escapeHtml(user.name)}</h3><dl><dt>Phone number</dt><dd><a href="tel:${encodeURIComponent(user.phone)}">${escapeHtml(user.phone)}</a></dd><dt>Course / programme</dt><dd>${escapeHtml(user.course)}</dd><dt>Academic year</dt><dd>${escapeHtml(user.year)}</dd></dl>`;
+    } catch (error) { if (requestId === profileRequest && dialog.open) content.innerHTML = `<p class="form-message" role="alert">${escapeHtml(error.message)}</p>`; }
   });
 }

@@ -189,3 +189,11 @@ A timeout alone cannot identify the remote network cause. If retries fail, check
 ## Required phone contact for new posts
 
 Lost and found forms require an unchecked-by-default confirmation that the student's registered phone number will be public on the listing. Browser and backend validation reject a new post without that confirmation, and new posts store `phone_public=TRUE`. The account must have a phone number. Existing posts are not modified; a previously private phone remains private. Notification emails still omit the poster's phone number.
+
+## Listing comments and commenter profiles
+
+Each lost/found listing has a collapsible comment section. Verified students can post 1-1,000 characters, limited to 20 comments per 15 minutes per account. Comments show the current account name and posting time, with HTML escaping in the browser. Threads load the latest 50 comments and can load earlier pages. The server assigns the commenter from the session, never from a submitted user ID.
+
+Tapping a commenter name opens an accessible dialog with that account's current phone, programme and academic year. This contact endpoint requires a verified sign-in and checks that the student commented on the requested item. It returns no password hashes, student numbers, email or roles. The comment form explains this contact sharing before submission. Anonymous visitors can read names/comments and are prompted to sign in to view contact details or post.
+
+Startup adds the `item_comments` table and its item/thread index without modifying existing data. Deleting a listing removes its comments through a foreign-key cascade; deleting an account also removes its comments. Comment routes/controllers/models use the existing project structure and parameterized PostgreSQL queries.

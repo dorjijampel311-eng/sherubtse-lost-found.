@@ -62,6 +62,15 @@ async function initializeDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS item_comments (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      item_id BIGINT NOT NULL REFERENCES item_reports(id) ON DELETE CASCADE,
+      user_id BIGINT NOT NULL REFERENCES portal_users(id) ON DELETE CASCADE,
+      body VARCHAR(1000) NOT NULL CHECK (length(trim(body)) BETWEEN 1 AND 1000),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS item_comments_item_idx ON item_comments(item_id,id DESC);
+
     CREATE INDEX IF NOT EXISTS item_reports_created_idx ON item_reports(created_at DESC);
     CREATE INDEX IF NOT EXISTS item_reports_user_idx ON item_reports(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS item_reports_kind_status_idx ON item_reports(kind, status);

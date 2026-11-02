@@ -1,8 +1,15 @@
 const router = require('express').Router();
 const controller = require('../controllers/itemController');
+const comments = require('../controllers/commentController');
+const users = require('../controllers/userController');
+const { rateLimit } = require('express-rate-limit');
+const commentLimit = rateLimit({ windowMs: 15*60*1000, limit: 20, standardHeaders: true, legacyHeaders: false, keyGenerator: req => String(req.session.user.id), message: { error: 'Too many comments. Please wait before posting again.' } });
 const { requireUser } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { createReportLimit } = require('../middleware/rateLimits');
+router.get('/items/:id/comments', comments.list);
+router.post('/items/:id/comments', requireUser, commentLimit, comments.create);
+router.get('/items/:id/commenters/:userId', requireUser, users.commenterProfile);
 router.get('/items', controller.listItems);
 router.get('/items/:id/photo', controller.itemPhoto);
 router.post('/items', requireUser, createReportLimit, upload.single('photo'), controller.createItem);

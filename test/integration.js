@@ -121,7 +121,7 @@ function itemForm(kind = 'found') {
     assert.equal((await request('/api/items?id=' + legacy.rows[0].id)).data.items[0].phone, null);
     const invalid = itemForm(); invalid.set('photo', new Blob(['invalid'], { type: 'image/png' }), 'invalid.png');
     assert.equal((await request('/api/items', { method: 'POST', cookie: owner.cookie, body: invalid })).status, 400);
-    const oversized = itemForm(); oversized.set('photo', new Blob([new Uint8Array(2 * 1024 * 1024 + 1)], { type: 'image/png' }), 'large.png');
+    const oversized = itemForm(); oversized.set('photo', new Blob([new Uint8Array(30 * 1024 * 1024 + 1)], { type: 'image/png' }), 'large.png');
     assert.equal((await request('/api/items', { method: 'POST', cookie: owner.cookie, body: oversized })).status, 413);
     const photo = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1cAAAAASUVORK5CYII=', 'base64');
     const profilePhoto = profileForm(); profilePhoto.set('photo', new Blob([photo], { type: 'image/png' }), 'avatar.png');
@@ -131,6 +131,29 @@ function itemForm(kind = 'found') {
     const created = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: valid });
     assert.equal(created.status, 201, JSON.stringify(created.data));
     const id = created.data.id;
+    assert.equal((await request(`/api/items/${legacy.rows[0].id}/comments`, { method: 'POST', cookie: other.cookie, json: { body: 'Comment on a lost item.' } })).status, 201);
+    const commentPath = `/api/items/${id}/comments`;
+    assert.equal((await request(commentPath, { method: 'POST', json: { body: 'Test comment' } })).status, 401);
+    for (const body of ['', '   ', 'x'.repeat(1001), 123]) assert.equal((await request(commentPath, { method: 'POST', cookie: other.cookie, json: { body } })).status, 400);
+    assert.equal((await request('/api/items/999999999999/comments', { method: 'POST', cookie: other.cookie, json: { body: 'Missing listing' } })).status, 404);
+    const comment = await request(commentPath, { method: 'POST', cookie: other.cookie, json: { body: '<script>example</script> A useful comment.', userId: owner.id } });
+    assert.equal(comment.status, 201);
+    const thread = await request(commentPath); assert.equal(thread.status, 200); assert.equal(thread.data.comments.length, 1); assert.equal(thread.data.total, 1);
+    assert.equal(thread.data.comments[0].userId, other.id); assert.equal(thread.data.comments[0].name, 'Integration check');
+    assert.equal(thread.data.comments[0].phone, undefined); assert.equal(thread.data.comments[0].email, undefined);
+    const profilePath = `/api/items/${id}/commenters/${other.id}`;
+    assert.equal((await request(profilePath)).status, 401);
+    const contact = await request(profilePath, { cookie: owner.cookie }); assert.equal(contact.status, 200);
+    assert.equal(contact.data.user.phone, '+975 17123456'); assert.equal(contact.data.user.course, 'Chemistry'); assert.equal(contact.data.user.year, 'Year 2');
+    for (const field of ['email','student_id','password_hash','role']) assert.equal(contact.data.user[field], undefined);
+    assert.equal((await request(`/api/items/${id}/commenters/${owner.id}`, { cookie: other.cookie })).status, 404);
+    assert.equal((await request('/api/items?id='+id)).data.items[0].commentCount, 1);
+    await pool.query('INSERT INTO item_comments(item_id,user_id,body) SELECT $1,$2,\'Temporary page comment\' FROM generate_series(1,51)', [id,other.id]);
+    const page = await request(commentPath); assert.equal(page.data.comments.length, 50); assert.equal(page.data.hasMore, true);
+    const olderPage = await request(commentPath+'?before='+page.data.nextCursor); assert.equal(olderPage.data.comments.length, 2); assert.equal(olderPage.data.hasMore, false);
+    assert.equal((await request(commentPath+'?before=bad')).status, 400);
+    console.log('PASS: comments authentication, validation, session author identity, pagination, commenter profile privacy and live account details.');
+
     assert.equal(foundEvents.length, 1);
     assert.equal(foundEvents[0].id, id);
     assert.equal(foundEvents[0].posterId, owner.id);
@@ -155,6 +178,7 @@ function itemForm(kind = 'found') {
     assert.equal((await request('/api/items', { cookie: owner.cookie })).data.items.some(item => item.id === id), false);
     assert.equal((await request('/api/items?mine=1', { cookie: owner.cookie })).data.items.some(item => item.id === id), true);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: owner.cookie })).status, 204);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM item_comments WHERE item_id=$1', [id])).rows[0].count, 0);
     // Avoid sending any actual notifications from verification.
     if (!process.env.MAIL_WEB_APP_URL) {
       const lost = await request('/api/items', { method: 'POST', cookie: owner.cookie, body: itemForm('lost') });

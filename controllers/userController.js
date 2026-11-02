@@ -26,3 +26,12 @@ exports.profilePhoto = async (req, res, next) => {
     res.send(result.rows[0].photo_data);
   } catch (error) { next(error); }
 };
+
+exports.commenterProfile = async (req,res,next) => {
+  try {
+    if (![req.params.id,req.params.userId].every(value => /^[1-9]\d{0,17}$/.test(value))) return res.status(404).json({ error: 'Commenter not found.' });
+    const result = await userModel.commenterProfile(req.params.id,req.params.userId);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Commenter not found.' });
+    res.json({ user: result.rows[0] });
+  } catch (error) { next(error); }
+};

@@ -16,3 +16,6 @@ exports.notificationRecipients = (excludeId = null) => pool.query(
   'SELECT id,student_id,email FROM portal_users WHERE notifications_enabled=TRUE AND email_verified=TRUE AND ($1::bigint IS NULL OR id<>$1)',
   [excludeId]
 );
+
+exports.commenterProfile = (itemId,userId) => pool.query(`SELECT u.id,u.name,u.phone,u.course,u.study_year AS year
+  FROM portal_users u WHERE u.id=$2 AND EXISTS(SELECT 1 FROM item_comments c WHERE c.item_id=$1 AND c.user_id=u.id)`, [itemId,userId]);
