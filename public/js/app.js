@@ -206,8 +206,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function validPhoto(form) {
   const file = form.querySelector('[name="photo"]')?.files[0];
-  if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024)) {
-    message('Choose a JPG, PNG or WebP photo, up to 2 MB.'); return false;
+  if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 30 * 1024 * 1024)) {
+    message('Choose a JPG, PNG or WebP photo, up to 30 MB.'); return false;
   }
   return true;
 }
