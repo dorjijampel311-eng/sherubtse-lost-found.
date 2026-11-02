@@ -8,10 +8,11 @@ const itemColumns = `i.id, i.kind, i.title, i.category, i.description, i.locatio
   CASE WHEN $1::bigint IS NOT NULL THEN u.email ELSE NULL END AS email,
   CASE WHEN i.phone_public OR i.user_id = $1 THEN u.phone ELSE NULL END AS phone`;
 
-exports.list = ({ mine, id, userId }) => {
+exports.list = ({ mine, id, userId }, database = pool) => {
   const byId = !mine && typeof id === 'string' && /^\d+$/.test(id);
-  const where = mine ? 'WHERE i.user_id=$1' : byId ? 'WHERE i.id=$2' : "WHERE i.status='open'";
-  return pool.query(`SELECT ${itemColumns} FROM item_reports i JOIN portal_users u ON u.id=i.user_id ${where} ORDER BY i.created_at DESC LIMIT 100`, [userId, ...(byId ? [id] : [])]);
+  const visible = "(i.status='open' OR (i.status='returned' AND i.returned_at IS NOT NULL AND i.returned_at > NOW()-INTERVAL '168 hours'))";
+  const where = mine ? 'WHERE i.user_id=$1' : `WHERE ${visible}${byId ? ' AND i.id=$2' : ''}`;
+  return database.query(`SELECT ${itemColumns} FROM item_reports i JOIN portal_users u ON u.id=i.user_id ${where} ORDER BY i.created_at DESC LIMIT 100`, [userId, ...(byId ? [id] : [])]);
 };
 
 exports.photo = (values = []) => pool.query('SELECT photo_mime,photo_data FROM item_reports WHERE id=$1 AND photo_data IS NOT NULL', values);

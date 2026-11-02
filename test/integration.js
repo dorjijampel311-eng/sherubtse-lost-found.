@@ -249,6 +249,11 @@ function itemForm(kind = 'found') {
     const returnResult = await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned', confirmed: true } });
     assert.equal(returnResult.status, 200); assert.ok(returnResult.data.returnedAt);
     assert.equal(new Date(returnResult.data.deleteAfter) - new Date(returnResult.data.returnedAt), 7*24*60*60*1000);
+    const immediatelyVisible = (await request('/api/items')).data.items.find(item => item.id===id);
+    assert.ok(immediatelyVisible,'Mark returned must not hide the listing immediately.');
+    assert.equal(immediatelyVisible.status,'returned'); assert.equal(immediatelyVisible.returnedAt,returnResult.data.returnedAt);
+    assert.equal((await request('/api/items?id='+id)).data.items[0].status,'returned');
+    assert.equal((await pool.query('SELECT id FROM item_reports WHERE id=$1',[id])).rowCount,1);
     const repeatReturn = await request(`/api/items/${id}`, { method: 'PATCH', cookie: owner.cookie, json: { status: 'returned', confirmed: true } });
     assert.equal(repeatReturn.data.returnedAt, returnResult.data.returnedAt);
     // Shadow only this fixture owner's rows with an updatable temporary view.
@@ -264,6 +269,15 @@ function itemForm(kind = 'found') {
       await retentionClient.query("INSERT INTO item_comments(item_id,user_id,body) VALUES($1,$2,'Temporary expired comment')", [expiredId,owner.id]);
       assert.equal((await retentionClient.query('SELECT photo_data IS NOT NULL AS photo FROM item_reports WHERE id=$1', [expiredId])).rows[0].photo, true);
       await retentionClient.query("UPDATE public.item_reports SET returned_at=NOW()-INTERVAL '200 hours' WHERE id=$1", [legacy.rows[0].id]);
+      await retentionClient.query("UPDATE public.item_reports SET created_at=NOW()-INTERVAL '365 days',returned_at=NOW()-INTERVAL '167 hours 59 minutes 59 seconds' WHERE id=$1",[id]);
+      const itemModel = require('../models/itemModel');
+      const withinWindow = await itemModel.list({mine:false,userId:null},retentionClient);
+      assert.ok(withinWindow.rows.some(item=>item.id===id && item.status==='returned'),'A nearly-seven-day returned post remains visible regardless of creation date.');
+      assert.ok(!withinWindow.rows.some(item=>item.id===expiredId),'At the seven-day boundary it is hidden before physical cleanup.');
+      assert.ok(withinWindow.rows.some(item=>item.id===legacy.rows[0].id),'Open posts remain visible regardless of age or stale timestamps.');
+      assert.equal((await itemModel.list({mine:false,id:expiredId,userId:null},retentionClient)).rowCount,0);
+      assert.equal((await itemModel.list({mine:false,id,userId:null},retentionClient)).rowCount,1);
+      assert.equal((await retentionClient.query('SELECT id FROM item_reports WHERE id=$1',[expiredId])).rowCount,1,'Visibility cutoff must not require the cleanup timer to run.');
       const cleanup = await require('../models/itemModel').deleteExpiredReturned(retentionClient);
       assert.equal(cleanup.rowCount, 1);
       assert.equal((await retentionClient.query('SELECT id FROM item_reports WHERE id=$1', [expiredId])).rowCount, 0);
@@ -273,7 +287,7 @@ function itemForm(kind = 'found') {
       assert.equal((await require('../models/itemModel').deleteExpiredReturned(retentionClient)).rowCount, 0);
     } finally { await retentionClient.query('ROLLBACK'); retentionClient.release(); }
     console.log('PASS: owner confirmation, persistent seven-day deadline, no countdown reset, expired post/image/comment deletion and protection of open or recent posts.');
-    assert.equal((await request('/api/items', { cookie: owner.cookie })).data.items.some(item => item.id === id), false);
+    assert.equal((await request('/api/items', { cookie: owner.cookie })).data.items.some(item => item.id === id && item.status==='returned'), true);
     assert.equal((await request('/api/items?mine=1', { cookie: owner.cookie })).data.items.some(item => item.id === id), true);
     assert.equal((await request(`/api/items/${id}`, { method: 'DELETE', cookie: owner.cookie })).status, 204);
     assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM item_comments WHERE item_id=$1', [id])).rows[0].count, 0);

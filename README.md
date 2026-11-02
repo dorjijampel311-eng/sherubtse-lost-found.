@@ -221,3 +221,7 @@ The admin router requires a verified administrator session before reads, uploads
 ## Delete your own comments
 
 Signed-in students see a small Delete button only beside their own comments. The interface asks for confirmation and refreshes the thread and count after deletion, preserving any unsubmitted comment draft. `DELETE /api/items/:id/comments/:commentId` requires a verified session and JSON `{ "confirmed": true }`. The parameterized DELETE matches the stored comment ID, item ID and authenticated user ID in one operation. Request-body user IDs are never trusted; the post owner or another account cannot delete someone else's comment through this endpoint. Missing/unowned comments return the same 404 response. Existing administrator deletion of a whole listing still cascades its comments.
+
+## Returned posts remain visible for seven days
+
+Browse items now includes open posts and posts marked returned within the last 168 hours. The card shows the existing Returned badge. The window is calculated from PostgreSQL's stored `returned_at`, not the post's creation date; confirming again does not extend it. Public item links use the same expiry filter. At the seven-day boundary, the listing stops appearing in Browse immediately on refresh, even if the periodic cleanup has not physically deleted it yet. The existing cleanup later removes the row, comments and image. Open listings are not expired or auto-deleted.

@@ -22,6 +22,7 @@ test('listing controls appear only for the signed-in owner, including numeric/st
   item.status = 'returned';
   const returned = vm.runInContext('card(item)', context);
   assert.ok(returned.includes('data-delete="7"')); assert.ok(!returned.includes('data-return'));
+  assert.ok(returned.includes('class="status-badge status-returned">Returned</span>'));
 });
 test('deletion requires confirmation, sends DELETE and refreshes the listing view', async () => {
   const context = browser(); let requests = 0, refreshes = 0;
