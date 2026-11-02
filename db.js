@@ -1,20 +1,9 @@
+require('./config/environment');
 const { Pool } = require('pg');
-
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is missing. Copy .env.example to .env and add your PostgreSQL connection URL.');
-}
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.PGSSLMODE === 'disable'
-    ? false
-    : process.env.NODE_ENV === 'production' || process.env.PGSSLMODE === 'require'
-      ? { rejectUnauthorized: false }
-      : false,
-  max: Number(process.env.PGPOOL_MAX || 10),
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
-});
+const { buildDatabaseConfig } = require('./config/database');
+const { logError } = require('./lib/safeErrors');
+const configuration = buildDatabaseConfig();
+const pool = new Pool(configuration.options);
 
 async function initializeDatabase() {
   await pool.query(`
@@ -79,6 +68,6 @@ async function initializeDatabase() {
   `);
 }
 
-pool.on('error', error => console.error('Unexpected PostgreSQL pool error:', error.message));
+pool.on('error', error => logError('Unexpected PostgreSQL pool error:', error));
 
-module.exports = { pool, initializeDatabase };
+module.exports = { pool, initializeDatabase, databaseSummary: configuration.summary };

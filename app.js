@@ -13,9 +13,12 @@ app.set('views', path.join(__dirname, 'views'));
 const PgSession = connectPgSimple(session);
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: { directives: { ...helmet.contentSecurityPolicy.getDefaultDirectives(), 'img-src': ["'self'", 'data:'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'font-src': ["'self'", 'https://fonts.gstatic.com'] } } }));
+app.use(require('./middleware/readiness'));
 app.use(express.json({ limit: '32kb' }));
+const sessionStore = new PgSession({ pool, tableName: 'portal_sessions', createTableIfMissing: true, pruneSessionInterval: 15 * 60 });
+app.locals.sessionStore = sessionStore;
 app.use(session({
-  store: new PgSession({ pool, tableName: 'portal_sessions', createTableIfMissing: true, pruneSessionInterval: 15 * 60 }),
+  store: sessionStore,
   name: 'sherubtse_lf.sid',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,

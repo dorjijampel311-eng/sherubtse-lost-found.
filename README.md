@@ -33,7 +33,7 @@ Set these only in `.env` locally or Render Environment settings:
 | `NODE_ENV` | `development` locally, `production` on Render |
 | `PGSSLMODE` | `disable` locally or `require` for hosted TLS |
 | `PORT` | Optional; defaults to 3000, Render supplies it |
-| `PGPOOL_MAX` | Optional PostgreSQL pool size, default 10 |
+| `PGPOOL_MAX` | Optional PostgreSQL pool size, default 5 |
 | `SMTP_HOST` | SMTP provider hostname |
 | `SMTP_PORT` | Usually 587 for STARTTLS, 465 for implicit TLS |
 | `SMTP_SECURE` | `true` for implicit TLS (465); `false` uses required STARTTLS |
@@ -163,3 +163,25 @@ The server, Express app and standalone email service load the project-root `.env
 `MAIL_WEB_APP_URL` must be a valid HTTPS deployment URL, `MAIL_WEB_APP_SECRET` must be nonblank, and `APP_BASE_URL` must be a valid HTTP/HTTPS website URL. SMTP variables are not required. The sender accepts only HTTP success with explicit JSON `ok:true`; malformed JSON, missing success flags, `ok:false`, network errors and timeouts fail safely. Missing configuration and send failures remain distinct; failed sends do not verify accounts or leave usable codes.
 
 A matching deployable receiver and instructions are in [apps-script/Code.gs](apps-script/Code.gs) and [apps-script/README.md](apps-script/README.md). Deploy it under your Google account, set the matching secret in Script Properties, and put the deployment's `/exec` URL in local `.env` and Render Environment. Automated tests mock both fetch and Apps Script's MailApp. The local checks cannot certify that your remote deployment has the correct secret, access or Google authorization.
+
+## PostgreSQL startup and Render readiness
+
+Email configuration is independent of database startup. `server.js` loads the project-root environment first, validates the database configuration, opens HTTP on `0.0.0.0` and the supplied `PORT` (default 3000), then initializes the database and existing admin setup. While initialization is pending, application routes and `/health` return 503; the ready message appears only after successful initialization. A later database outage makes `/health` return 503. Do not use a static page as a substitute for the database health check.
+
+Set Render's health-check path to `/health`. The former startup waited for one 10-second database attempt before binding a port, so a failed database connection also caused a port-scan timeout. The new listener avoids that port dependency without declaring an unavailable database healthy.
+
+Startup logs a sanitized database configuration summary (target class, TLS mode, pool size and timeouts) and structured errors with name, code, message, stack and nested causes/aggregate errors. URLs, credentials, known secrets and email addresses are redacted. No database connection string is printed. Authentication/configuration errors fail immediately; transient connection errors retry up to three times by default with 1s and 2s delays. Schema operations remain idempotent. Queries and connection acquisition have timeouts; retry exhaustion closes the listener, session-store timer and the shared pool, then exits unsuccessfully. SIGINT/SIGTERM stop accepting requests, drain HTTP, stop session pruning and end the pool, with a 10-second CLI shutdown grace period.
+
+`config/database.js` validates `DATABASE_URL` before constructing one pool in `db.js`. It requires an explicit PostgreSQL scheme, user, host and database. Production loopback targets are rejected; there is no localhost or fake-database fallback. URL credentials must be percent-encoded. Supported URL options are `sslmode`, `connect_timeout` and `application_name`; unsupported or conflicting options fail clearly. Explicit client fields keep node-postgres URL parsing from silently overriding TLS configuration.
+
+Render settings:
+
+- `DATABASE_URL`: the actual database Internal Database URL when the web service and database share the same Render workspace and region. Internal hostnames are not usable from your laptop or a different region. For an external connection, use the External Database URL and check the database's external access rules.
+- `NODE_ENV=production`; set a stable `SESSION_SECRET` of at least 32 characters. Let Render provide `PORT`.
+- `PGSSLMODE=disable` for local PostgreSQL or Render's private internal connection. Use `require` for an external endpoint that requires encrypted connections; use `verify-full` when validating the provider's trusted certificate. `require` retains the previous encrypt-without-certificate-verification behavior. Any `sslmode` inside `DATABASE_URL` must match `PGSSLMODE` or be removed. Defaults are disable for loopback/Render private hostnames and verify-full for other remote hosts; production mode alone does not force an incompatible SSL setting.
+- Optional: `PGPOOL_MAX=5` (1-20), `PGCONNECT_TIMEOUT_MS=10000` (1000-30000), `PGQUERY_TIMEOUT_MS=15000` (1000-60000), `DB_STARTUP_ATTEMPTS=3` (1-5), `DB_RETRY_DELAY_MS=1000` (0-5000). Blank values use defaults. Pool size counts per app process, so size it within the database's total connection allowance.
+- Keep the existing mail web app variables and `APP_BASE_URL`; they do not affect PostgreSQL connectivity.
+
+A timeout alone cannot identify the remote network cause. If retries fail, check the current Render database URL and credentials, matching workspace/region, database availability/expiration, external access rules (for external URLs), and connection limits. Wrong credentials/unknown database names are not fixed by retries. Increasing timeouts does not make an unreachable internal hostname reachable. Use the sanitized code/cause in the new logs to distinguish these cases.
+
+`npm test` includes database URL/TLS configuration, singleton pool construction, retry exhaustion, fail-fast authentication, occupied-port failures, cleanup, signal cancellation during initialization, readiness and secret-redaction tests. `npm run test:auth:db` and `npm run test:integration` exercise the existing features against your development PostgreSQL database with all email mocked.
