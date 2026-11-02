@@ -172,11 +172,7 @@ async function initMyItems() {
 async function initHome() {
   if (!document.querySelector('#recent-items')) return;
   try {
-    const [items, stats] = await Promise.all([fetchItems(), api('/api/stats')]);
-    document.querySelector('#stat-lost').textContent = stats.lost;
-    document.querySelector('#stat-found').textContent = stats.found;
-    document.querySelector('#stat-returned').textContent = stats.returned;
-    const latest = items.slice(0, 3);
+    const items = await fetchItems();    const latest = items.slice(0, 3);
     bindListingActions(document.querySelector('#recent-items'), initHome);
     document.querySelector('#recent-items').innerHTML = latest.length ? latest.map(item => card(item)).join('') : '<div class="empty-state">No reports have been posted yet. Be the first to <a href="/report-lost">report an item</a>.</div>';
   } catch { document.querySelector('#recent-items').innerHTML = '<div class="empty-state">Listings will appear here when the service is connected.</div>'; }
