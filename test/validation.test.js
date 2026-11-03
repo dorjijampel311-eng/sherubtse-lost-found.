@@ -8,6 +8,7 @@ test('student number must have exactly eight digits and match college email', ()
 test('profile requires real fields, student year and valid phone', () => {
   const profile = { name: 'Student', course: 'Chemistry', year: 'Year 2', phone: '+975 17123456' };
   assert.equal(validProfile(profile), true);
+  assert.equal(validProfile({ ...profile, course: 'Life Science' }), true);
   for (const change of [{ name: '' }, { course: ' ' }, { course: 'Unlisted course' }, { year: 'Staff' }, { phone: 'abcdefghi' }, { name: 'x'.repeat(101) }]) assert.equal(validProfile({ ...profile, ...change }), false);
 });
 

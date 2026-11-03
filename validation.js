@@ -1,4 +1,4 @@
-const courses = ['Chemistry', 'Physics', 'DCPM', 'EPS', 'DSDA', 'Math'];
+const courses = ['Chemistry', 'Physics', 'DCPM', 'EPS', 'DSDA', 'Math', 'Life Science'];
 const years = ['Year 1', 'Year 2', 'Year 3', 'Year 4'];
 function validStudent(id, email) {
   return typeof id === 'string' && /^\d{8}$/.test(id) && email === `${id}.sherubtse@rub.edu.bt`;
